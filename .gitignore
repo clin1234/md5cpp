@@ -1,9 +1,5 @@
-# Prerequisites
-*.d
-
 # Object files
 *.o
-*.ko
 *.obj
 *.elf
 
@@ -43,15 +39,6 @@ pfft
 *.idb
 *.pdb
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
 # Temp files
 *.swp
 *.tmp
@@ -59,21 +46,17 @@ dkms.conf
 ~*
 *.e
 
-# autotools
-/aclocal.m4
-/autom4te.cache/
-/build/
-/build-aux/
-conf*.dir/
-/config.h
-/config.log
-/config.status
-/configure
-.deps/
-.dirstamp
+# CMake-generated files
+/build
+compile_commands.json
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles
 Makefile
-Makefile.in
-stamp-*
-*.stamp
-*.stamp-*
-.Tpo
+*.pc
+
+# Editor-specific files
+.codelite/
+.vscode/
+
+.cache/
