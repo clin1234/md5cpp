@@ -27,18 +27,16 @@
 #define MD4C_HTML_H
 
 #include "md4c.h"
-
-#ifdef __cplusplus
-    extern "C" {
-#endif
-
+#include <string_view>
 
 /* If set, debug output from md_parse() is sent to stderr. */
+
 #define MD_HTML_FLAG_DEBUG                  0x0001
 #define MD_HTML_FLAG_VERBATIM_ENTITIES      0x0002
 #define MD_HTML_FLAG_SKIP_UTF8_BOM          0x0004
 #define MD_HTML_FLAG_XHTML                  0x0008
 
+//using md_string_span = std::basic_string_view<MD_CHAR>;
 
 /* Render Markdown into HTML.
  *
@@ -56,13 +54,14 @@
  * Returns -1 on error (if md_parse() fails.)
  * Returns 0 on success.
  */
+extern "C" {
 int md_html(const MD_CHAR* input, MD_SIZE input_size,
             void (*process_output)(const MD_CHAR*, MD_SIZE, void*),
             void* userdata, unsigned parser_flags, unsigned renderer_flags);
+}
 
-
-#ifdef __cplusplus
-    }  /* extern "C" { */
-#endif
+int md_html(const std::u8string_view& input,
+            void (*process_output)(const std::u8string_view&, void*),
+            void* userdata, unsigned parser_flags, unsigned renderer_flags);
 
 #endif  /* MD4C_HTML_H */

@@ -4,14 +4,14 @@
 [![Coverity Scan Status](https://img.shields.io/coverity/scan/mity-md4c.svg?label=coverity%20scan)](https://scan.coverity.com/projects/mity-md4c)
 
 
-# MD4C Readme
+# MD5CPP Readme
 
-* Home: http://github.com/mity/md4c
-* Wiki: http://github.com/mity/md4c/wiki
-* Issue tracker: http://github.com/mity/md4c/issues
+* Home: http://github.com/clin1234/md5cpp
+* Wiki: http://github.com/mity/md4c/wiki (for now)
+* Issue tracker: http://github.com/clin1234/md5cpp/issues (see also 
+http://github.com/mity/md4c/issues as suggestions)
 
-MD4C stands for "Markdown for C" and that's exactly what this project is about.
-
+MD5CPP stands for "Markdown fur C++", and is derived from [MD4C](https://github.com/mity/md4c).
 
 ## What is Markdown
 
@@ -21,73 +21,70 @@ The following resources can explain more if you are unfamiliar with it:
 * [Wikipedia article](http://en.wikipedia.org/wiki/Markdown)
 * [CommonMark site](http://commonmark.org)
 
+## What is MD5CPP
 
-## What is MD4C
+MD5CXX:
 
-MD4C is Markdown parser implementation in C, with the following features:
-
-* **Compliance:** Generally, MD4C aims to be compliant to the latest version of
-  [CommonMark specification](http://spec.commonmark.org/). Currently, we are
+* **Compliance:** aims to be compliant to the latest version of
+  [CommonMark specification](http://spec.commonmark.org/). Currently, this is
   fully compliant to CommonMark 0.30.
 
-* **Extensions:** MD4C supports some commonly requested and accepted extensions.
+* **Extensions:** supports some commonly requested and accepted extensions.
   See below.
 
-* **Performance:** MD4C is [very fast](https://talk.commonmark.org/t/2520).
+* **Compactness:** is implemented in one source file and one header
+  file. There are no dependencies other than standard C++ library. (TODO:
+  maybe add a headers-only library for argument parsing)?
 
-* **Compactness:** MD4C parser is implemented in one source file and one header
-  file. There are no dependencies other than standard C library.
+* **Embedding:** is easy to reuse in other projects, its API is
+  very straightforward: There is actually just one function, `md_parse()`,
+  available for both C and C++ applications.
 
-* **Embedding:** MD4C parser is easy to reuse in other projects, its API is
-  very straightforward: There is actually just one function, `md_parse()`.
-
-* **Push model:** MD4C parses the complete document and calls few callback
+* **Push model:** parses the complete document and calls few callback
   functions provided by the application to inform it about a start/end of
   every block, a start/end of every span, and with any textual contents.
 
-* **Portability:** MD4C builds and works on Windows and POSIX-compliant OSes.
-  (It should be simple to make it run also on most other platforms, at least as
-  long as the platform provides C standard library, including a heap memory
-  management.)
+* **Portability:** builds and works on Windows and POSIX-compliant OSes.
+  (It should be simple to port it to most other platforms, so long as
+   the platform has a port of GCC or Clang.)
 
-* **Encoding:** MD4C by default expects UTF-8 encoding of the input document.
+* **Encoding:** expects the input document to be encoded in UTF-8 by default.
   But it can be compiled to recognize ASCII-only control characters (i.e. to
   disable all Unicode-specific code), or (on Windows) to expect UTF-16 (i.e.
   what is on Windows commonly called just "Unicode"). See more details below.
 
 * **Permissive license:** MD4C is available under the [MIT license](LICENSE.md).
 
-
-## Using MD4C
+## Using MD5CPP
 
 ### Parsing Markdown
 
 If you need just to parse a Markdown document, you need to include `md4c.h`
-and link against MD4C library (`-lmd4c`); or alternatively add `md4c.[hc]`
-directly to your code base as the parser is only implemented in the single C
+and link against MD4C library (`-lmd5cpp`); or alternatively add `md4c.{h,cpp}`
+directly to your code base as the parser is only implemented in the single C++
 source file.
 
 The main provided function is `md_parse()`. It takes a text in the Markdown
 syntax and a pointer to a structure which provides pointers to several callback
-functions.
+functions. Note that the C++ version of `md_parse()` requires the platform's
+standard library to support std::string_view.
 
 As `md_parse()` processes the input, it calls the callbacks (when entering or
 leaving any Markdown block or span; and when outputting any textual content of
 the document), allowing application to convert it into another format or render
 it onto the screen.
 
-
 ### Converting to HTML
 
 If you need to convert Markdown to HTML, include `md4c-html.h` and link against
-MD4C-HTML library (`-lmd4c-html`); or alternatively add the sources `md4c.[hc]`,
-`md4c-html.[hc]` and `entity.[hc]` into your code base.
+MD4C-HTML library (`-lmd5cpp-html`); or alternatively add the sources `md4c.{h,cpp}`,
+`md4c-html.{h,cpp}` and `entity.{h,cpp}` into your code base. Like `md_parse()`,
+the C++ version of `md_html()` requires the platform's standard library to support std::string_view.
 
 To convert a Markdown input, call `md_html()` function. It takes the Markdown
 input and calls the provided callback function. The callback is fed with
 chunks of the HTML output. Typical callback implementation just appends the
 chunks into a buffer or writes them to a file.
-
 
 ## Markdown Extensions
 
@@ -137,7 +134,6 @@ disabled with the following flags:
 * With the flag `MD_FLAG_NOINDENTEDCODEBLOCKS`, indented code blocks are
   disabled.
 
-
 ## Input/Output Encoding
 
 The CommonMark specification declares that any sequence of Unicode code points
@@ -156,16 +152,16 @@ situations when parsing Markdown documents:
 3. For translating HTML entities (e.g. `&amp;`) and numeric character
    references (e.g. `&#35;` or `&#xcab;`) into their Unicode equivalents.
 
-   However note MD4C leaves this translation on the renderer/application; as
+   However, MD5CPP leaves this translation on the renderer/application; as
    the renderer is supposed to really know output encoding and whether it
    really needs to perform this kind of translation. (For example, when the
    renderer outputs HTML, it may leave the entities untranslated and defer the
    work to a web browser.)
 
-MD4C relies on this property of the CommonMark and the implementation is, to
-a large degree, encoding-agnostic. Most of MD4C code only assumes that the
-encoding of your choice is compatible with ASCII. I.e. that the codepoints
-below 128 have the same numeric values as ASCII.
+MD5CPP relies on this property of the CommonMark and the implementation is, to
+a large degree, encoding-agnostic. Most of MD5CPP's code only assumes that the
+encoding of your choice is compatible with ASCII (i.e. that the codepoints
+below 128 have the same numeric values as ASCII).
 
 Any input MD4C does not understand is simply seen as part of the document text
 and sent to the renderer's callback functions unchanged.
@@ -174,12 +170,12 @@ The two situations (word boundary detection and link reference matching) where
 MD4C has to understand Unicode are handled as specified by the following
 preprocessor macros (as specified at the time MD4C is being built):
 
-* If preprocessor macro `MD4C_USE_UTF8` is defined, MD4C assumes UTF-8 for the
+* If preprocessor macro `MD4C_USE_UTF8` is defined, MD5CPP assumes UTF-8 for the
   word boundary detection and for the case-insensitive matching of link labels.
 
   When none of these macros is explicitly used, this is the default behavior.
 
-* On Windows, if preprocessor macro `MD4C_USE_UTF16` is defined, MD4C uses
+* On Windows, if preprocessor macro `MD4C_USE_UTF16` is defined, MD5CPP uses
   `WCHAR` instead of `char` and assumes UTF-16 encoding in those situations.
   (UTF-16 is what Windows developers usually call just "Unicode" and what
   Win32API generally works with.)
@@ -188,7 +184,7 @@ preprocessor macros (as specified at the time MD4C is being built):
   to define the macro both when building MD4C as well as when including
   `md4c.h`.
 
-  Also note this is only supported in the parser (`md4c.[hc]`). The HTML
+  Also note this is only supported in the parser (`md4c.{h,cpp}`). The HTML
   renderer does not support this and you will have to write your own custom
   renderer to use this feature.
 
@@ -199,7 +195,6 @@ preprocessor macros (as specified at the time MD4C is being built):
   won't be recognized as such and that link reference matching will work in
   a case-insensitive way only for ASCII letters (`[a-zA-Z]`).
 
-
 ## Documentation
 
 The API of the parser is quite well documented in the comments in the `md4c.h`.
@@ -209,8 +204,7 @@ There is also [project wiki](http://github.com/mity/md4c/wiki) which provides
 some more comprehensive documentation. However note it is incomplete and some
 details may be somewhat outdated.
 
-
-## FAQ
+## FAQ (rest of README left verbatim)
 
 **Q: How does MD4C compare to a parser XY?**
 
@@ -263,9 +257,9 @@ you have to do it on your own. The easiest way how to do this is to simply
 validate the whole document before passing it to the MD4C parser.
 
 
-## License
+## License (until here)
 
-MD4C is covered with MIT license, see the file `LICENSE.md`.
+MD5CPP is covered with MIT license, see the file `LICENSE.md`.
 
 
 ## Links to Related Projects

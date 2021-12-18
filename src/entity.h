@@ -26,17 +26,20 @@
 #ifndef MD4C_ENTITY_H
 #define MD4C_ENTITY_H
 
-#include <stdlib.h>
+#include <array>
+#include <optional>
+#include <string_view>
 
-
-/* Most entities are formed by single Unicode codepoint, few by two codepoints.
- * Single-codepoint entities have codepoints[1] set to zero. */
 struct entity {
-    const char* name;
-    unsigned codepoints[2];
+  const char *name;
+  unsigned codepoints[2];
 };
 
-const struct entity* entity_lookup(const char* name, size_t name_size);
+/* Returns `std::optional<struct entity>`, where `operator bool()` can be used
+to determine if `name` matches an entity, and .value() if it exists. */
+constexpr std::optional<entity> lookup(std::string_view);
 
-
-#endif  /* MD4C_ENTITY_H */
+extern "C" {
+const struct entity *entity_lookup(const char *name, size_t name_size);
+}
+#endif /* MD4C_ENTITY_H */

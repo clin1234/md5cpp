@@ -26,12 +26,8 @@
 #ifndef CRE_CMDLINE_H
 #define CRE_CMDLINE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
 /* The option may have an argument. (Affects only long option.) */
+#include <array>
 #define CMDLINE_OPTFLAG_OPTIONALARG     0x0001
 
 /* The option must have an argument.
@@ -77,14 +73,13 @@ extern "C" {
 #define CMDLINE_OPTID_MISSINGARG        (-0x7fffffff + 1)
 #define CMDLINE_OPTID_BOGUSARG          (-0x7fffffff + 2)
 
-
-typedef struct CMDLINE_OPTION {
+struct _CMDLINE_OPTION {
     char shortname;         /* Short (single char) option or 0. */
     const char* longname;   /* Long name (after "--") or NULL. */
     int id;                 /* Non-zero ID to identify the option in the callback; or zero to denote end of options list. */
     unsigned flags;         /* Bitmask of CMDLINE_OPTFLAG_xxxx flags. */
-} CMDLINE_OPTION;
-
+};
+using CMDLINE_OPTION = _CMDLINE_OPTION;
 
 /* Parses all options and their arguments as specified by argc, argv accordingly
  * with the given options (except argv[0] which is ignored).
@@ -140,14 +135,10 @@ typedef struct CMDLINE_OPTION {
  * If the callback returns a non-zero, cmdline_read() aborts immediately and
  * cmdline_read() propagates the same return value to the caller.
  */
+// using callback = int(tmp)(int, const char*, void*);
 
-int cmdline_read(const CMDLINE_OPTION* options, int argc, char** argv,
+int cmdline_read(const std::array<CMDLINE_OPTION, 26>& options, int argc, char** argv,
         int (*callback)(int /*id*/, const char* /*arg*/, void* /*userdata*/),
         void* userdata);
-
-
-#ifdef __cplusplus
-}  /* extern "C" { */
-#endif
 
 #endif  /* CRE_CMDLINE_H */

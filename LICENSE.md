@@ -1,3 +1,6 @@
+Copyright © 2021 Charlie Lin. The license is under the MIT license;
+substantial portions of this software derives from md4c, whose original
+license is the following:
 
 # The MIT License (MIT)
 

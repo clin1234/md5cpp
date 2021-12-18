@@ -3,44 +3,40 @@
 import os
 import sys
 import textwrap
-
-
-self_path = os.path.dirname(os.path.realpath(__file__));
-f = open(self_path + "/unicode/DerivedGeneralCategory.txt", "r")
+import pathlib
 
 codepoint_list = []
 category_list = [ "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps" ]
 
-# Filter codepoints falling in the right category:
-for line in f:
-    comment_off = line.find("#")
-    if comment_off >= 0:
-        line = line[:comment_off]
-    line = line.strip()
-    if not line:
-        continue
+path = pathlib.Path("unicode/DerivedGeneralCategory.txt")
+with path.open('r') as f:
+    # Filter codepoints falling in the right category:
+    for line in f:
+        comment_off = line.find("#")
+        if comment_off >= 0:
+            line = line[:comment_off]
+        line = line.strip()
+        if not line:
+            continue
 
-    char_range, category = line.split(";")
-    char_range = char_range.strip()
-    category = category.strip()
+        char_range, category = line.split(";")
+        char_range = char_range.strip()
+        category = category.strip()
 
-    if not category in category_list:
-        continue
+        if category not in category_list:
+            continue
 
-    delim_off = char_range.find("..")
-    if delim_off >= 0:
-        codepoint0 = int(char_range[:delim_off], 16)
-        codepoint1 = int(char_range[delim_off+2:], 16)
-        for codepoint in range(codepoint0, codepoint1 + 1):
+        delim_off = char_range.find("..")
+        if delim_off >= 0:
+            codepoint0 = int(char_range[:delim_off], 16)
+            codepoint1 = int(char_range[delim_off+2:], 16)
+            for codepoint in range(codepoint0, codepoint1 + 1):
+                codepoint_list.append(codepoint)
+        else:
+            codepoint = int(char_range, 16)
             codepoint_list.append(codepoint)
-    else:
-        codepoint = int(char_range, 16)
-        codepoint_list.append(codepoint)
-f.close()
-
 
 codepoint_list.sort()
-
 
 index0 = 0
 count = len(codepoint_list)
@@ -60,7 +56,7 @@ while index0 < count:
 
     index0 = index1
 
-sys.stdout.write("static const unsigned PUNCT_MAP[] = {\n")
-sys.stdout.write("\n".join(textwrap.wrap(", ".join(records), 110,
-                    initial_indent = "    ", subsequent_indent="    ")))
-sys.stdout.write("\n};\n\n")
+print("static constexpr unsigned PUNCT_MAP[] = {")
+print(textwrap.fill(", ".join(records), 110,
+                    initial_indent = "    ", subsequent_indent="    "))
+print("};")
