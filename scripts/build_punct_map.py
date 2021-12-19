@@ -9,7 +9,7 @@ codepoint_list = []
 category_list = [ "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps" ]
 
 path = pathlib.Path("unicode/DerivedGeneralCategory.txt")
-with path.open('r') as f:
+with path.open() as f:
     # Filter codepoints falling in the right category:
     for line in f:
         comment_off = line.find("#")

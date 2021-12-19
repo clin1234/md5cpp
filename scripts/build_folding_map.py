@@ -7,8 +7,8 @@ import pathlib
 
 status_list = [ "C", "F" ]
 folding_list = [dict()]*3
-path = pathlib.Path('unicode/CaseFolding.txt', 'r')
-with path.open('r') as f:
+path = pathlib.Path('unicode/CaseFolding.txt')
+with path.open() as f:
     # Filter the foldings for "full" folding.
     for line in f:
         comment_off = line.find("#")
@@ -101,12 +101,12 @@ for mapping_len in range(1, 4):
             data_records.append(mapping_str(data_records, folding[codepoint_list[index0]]))
             index0 += 1
 
-    print(f"static const unsigned FOLD_MAP_{mapping_len}[] = {{")
+    print(f"static constexpr unsigned FOLD_MAP_{mapping_len}[] = {{")
     print(textwrap.fill(", ".join(records), 110,
                         initial_indent = "    ", subsequent_indent="    "))
     print("};")
 
-    print(f"static const unsigned FOLD_MAP_{mapping_len}_DATA[] = {{")
+    print(f"static constexpr unsigned FOLD_MAP_{mapping_len}_DATA[] = {{")
     print(textwrap.fill(", ".join(data_records), 110,
                         initial_indent = "    ", subsequent_indent="    "))
     print("};")

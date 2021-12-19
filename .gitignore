@@ -60,3 +60,4 @@ Makefile
 .vscode/
 
 .cache/
+__pycache__/
