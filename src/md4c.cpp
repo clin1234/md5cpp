@@ -25,6 +25,13 @@
 
 #include "md4c.h"
 
+/* 
+On G++ 12.0.0 snapshot 20211121 targeting x86_64-w64-mingw32,
+this header is needed to find std::ranges::find_if_not.
+*/
+#if __GNUG__
+#include <bits/ranges_util.h>
+#endif
 #include <cctype>
 #include <limits.h>
 #include <stdio.h>
@@ -1189,7 +1196,7 @@ static int md_scan_for_html_closer(MD_CTX &ctx, const MD_CHAR *str, MD_SIZE len,
                                    std::span<Line> lines, OFF beg, OFF max_end,
                                    OFF *p_end, OFF *p_scan_horizon) {
   OFF off = beg;
-  int i = 0;
+  size_t i = 0;
 
   if (off < *p_scan_horizon && *p_scan_horizon >= max_end - len) {
     /* We have already scanned the range up to the max_end so we know
@@ -2282,7 +2289,7 @@ static int md_is_link_reference(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   MD_ASSERT(lines.front().beg <= beg);
   const auto &beg_line_iter{std::ranges::find_if_not(
       lines, [beg](const Line &line) { return beg >= line.end; })};
-  const Line &beg_line{*beg_line_iter};
+  const Line beg_line{*beg_line_iter};
 
   MD_ASSERT(end <= lines.back().end);
   const Line &end_line = *std::ranges::find_if_not(
@@ -3013,13 +3020,13 @@ static int md_is_autolink(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end,
 
 static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
                             bool table_mode) {
-  int i;
   int ret = 0;
   MD_MARK *mark;
   OFF codespan_last_potential_closers[CODESPAN_MARK_MAXLEN] = {0};
   bool codespan_scanned_till_paragraph_end = false;
 
-  for (auto &line : lines) {
+  for (size_t i = 0; i < lines.size(); i++) {
+    auto& line{lines[i]};
     OFF off = line.beg;
     OFF line_end = line.end;
 
