@@ -26,8 +26,10 @@
 #ifndef MD4C_H
 #define MD4C_H
 
+#ifdef __cplusplus
 #include <string>
 #include <string_view>
+#endif
 
 #if defined MD4C_USE_UTF16
 /* Magic to support UTF-16. Note that in order to use it, you have to define
@@ -43,8 +45,10 @@ typedef WCHAR MD_CHAR;
 typedef char MD_CHAR;
 #endif
 
+#ifdef __cplusplus
 using mdstring = std::basic_string<MD_CHAR>;
 using mdstringview = std::basic_string_view<MD_CHAR>;
+#endif
 
 typedef unsigned MD_SIZE;
 typedef unsigned MD_OFFSET;
@@ -432,6 +436,8 @@ using MD_PARSER = MD_PARSER;
  * fails), -1 is returned. If the processing is aborted due any callback
  * returning non-zero, the return value of the callback is returned.
  */
+int md_parse(mdstringview, const MD_PARSER& parser, void* uerdata);
+
 extern "C" {
 int md_parse(const MD_CHAR *text, MD_SIZE size, const MD_PARSER *parser,
              void *userdata);

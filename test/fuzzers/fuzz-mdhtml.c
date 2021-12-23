@@ -20,8 +20,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size){
     data += 4; size -= 4;
 
     /* Allocate enough space */
-    char *out = malloc(size*3);
-    md_html(data, size, process_output, out, parser_flags, renderer_flags);
+    char *out = (char*)malloc(size*3);
+    md_html((MD_CHAR*)data, size, process_output, out, parser_flags, renderer_flags);
     free(out);
 
     return 0;

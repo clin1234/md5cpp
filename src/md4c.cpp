@@ -36,7 +36,6 @@
 #include <variant>
 #include <vector>
 
-
 /*****************************
  ***  Miscellaneous Stuff  ***
  *****************************/
@@ -179,7 +178,7 @@ struct MD_CTX_tag {
 #if defined MD4C_USE_UTF16
   char mark_char_map[128];
 #else
-  char mark_char_map[256];
+  signed char mark_char_map[256];
 #endif
 
   /* For resolving of inline spans. */
@@ -267,6 +266,7 @@ typedef struct MD_LINE_tag Line;
 struct MD_LINE_tag {
   OFF beg;
   OFF end;
+  bool operator==(const Line &) const = default;
 };
 
 typedef struct MD_VERBATIMLINE_tag MD_VERBATIMLINE;
@@ -988,7 +988,8 @@ static inline unsigned md_decode_unicode(const CHAR *str, OFF off, SZ str_size,
  * what the caller should allocate.)
  */
 static void md_merge_lines(MD_CTX &ctx, OFF beg, OFF end, std::span<Line> lines,
-CHAR line_break_replacement_char,CHAR *buffer, SZ *p_size) {
+                           CHAR line_break_replacement_char, CHAR *buffer,
+                           SZ *p_size) {
   CHAR *ptr = buffer;
   int line_index = 0;
   OFF off = beg;
@@ -1032,8 +1033,8 @@ static int md_merge_lines_alloc(MD_CTX &ctx, OFF beg, OFF end,
     return -1;
   }
 
-  md_merge_lines(ctx, beg, end, lines, line_break_replacement_char,
-                 buffer, p_size);
+  md_merge_lines(ctx, beg, end, lines, line_break_replacement_char, buffer,
+                 p_size);
 
   *p_str = buffer;
   return 0;
@@ -1070,7 +1071,7 @@ static int md_is_html_tag(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   int attr_state;
   OFF off = beg;
   OFF line_end = (lines.size() > 0) ? lines[0].end : ctx.size;
-  int i = 0;
+  size_t i = 0;
 
   MD_ASSERT(CH(beg) == _T('<'));
 
@@ -1185,9 +1186,8 @@ done:
 }
 
 static int md_scan_for_html_closer(MD_CTX &ctx, const MD_CHAR *str, MD_SIZE len,
-                                   std::span<Line> lines, OFF beg,
-                                   OFF max_end, OFF *p_end,
-                                   OFF *p_scan_horizon) {
+                                   std::span<Line> lines, OFF beg, OFF max_end,
+                                   OFF *p_end, OFF *p_scan_horizon) {
   OFF off = beg;
   int i = 0;
 
@@ -1218,8 +1218,8 @@ static int md_scan_for_html_closer(MD_CTX &ctx, const MD_CHAR *str, MD_SIZE len,
   }
 }
 
-static int md_is_html_comment(MD_CTX &ctx, std::span<Line> lines,
-                              OFF beg, OFF max_end, OFF *p_end) {
+static int md_is_html_comment(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                              OFF max_end, OFF *p_end) {
   OFF off = beg;
 
   MD_ASSERT(CH(beg) == _T('<'));
@@ -1239,8 +1239,8 @@ static int md_is_html_comment(MD_CTX &ctx, std::span<Line> lines,
 
   /* HTML comment must not contain "--", so we scan just for "--" instead
    * of "-->" and verify manually that '>' follows. */
-  if (md_scan_for_html_closer(ctx, _T("--"), 2, lines, off, max_end,
-                              p_end, &ctx.html_comment_horizon)) {
+  if (md_scan_for_html_closer(ctx, _T("--"), 2, lines, off, max_end, p_end,
+                              &ctx.html_comment_horizon)) {
     if (*p_end < max_end && CH(*p_end) == _T('>')) {
       *p_end = *p_end + 1;
       return true;
@@ -1250,8 +1250,8 @@ static int md_is_html_comment(MD_CTX &ctx, std::span<Line> lines,
   return false;
 }
 
-static int md_is_html_processing_instruction(MD_CTX &ctx, std::span<Line> lines, OFF beg, OFF max_end,
-                                             OFF *p_end) {
+static int md_is_html_processing_instruction(MD_CTX &ctx, std::span<Line> lines,
+                                             OFF beg, OFF max_end, OFF *p_end) {
   OFF off = beg;
 
   if (off + 2 >= lines[0].end)
@@ -1260,12 +1260,12 @@ static int md_is_html_processing_instruction(MD_CTX &ctx, std::span<Line> lines,
     return false;
   off += 2;
 
-  return md_scan_for_html_closer(ctx, _T("?>"), 2, lines, off, max_end,
-                                 p_end, &ctx.html_proc_instr_horizon);
+  return md_scan_for_html_closer(ctx, _T("?>"), 2, lines, off, max_end, p_end,
+                                 &ctx.html_proc_instr_horizon);
 }
 
-static int md_is_html_declaration(MD_CTX &ctx, std::span<Line> lines,
-                                  OFF beg, OFF max_end, OFF *p_end) {
+static int md_is_html_declaration(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                                  OFF max_end, OFF *p_end) {
   OFF off = beg;
 
   if (off + 2 >= lines[0].end)
@@ -1283,12 +1283,12 @@ static int md_is_html_declaration(MD_CTX &ctx, std::span<Line> lines,
   if (off < lines[0].end && !ISWHITESPACE(off))
     return false;
 
-  return md_scan_for_html_closer(ctx, _T(">"), 1, lines, off, max_end,
-                                 p_end, &ctx.html_decl_horizon);
+  return md_scan_for_html_closer(ctx, _T(">"), 1, lines, off, max_end, p_end,
+                                 &ctx.html_decl_horizon);
 }
 
-static int md_is_html_cdata(MD_CTX &ctx, std::span<Line> lines,
-                            OFF beg, OFF max_end, OFF *p_end) {
+static int md_is_html_cdata(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                            OFF max_end, OFF *p_end) {
   static const CHAR open_str[] = _T("<![CDATA[");
   static const SZ open_size = SIZEOF_ARRAY(open_str) - 1;
 
@@ -1303,8 +1303,8 @@ static int md_is_html_cdata(MD_CTX &ctx, std::span<Line> lines,
   if (lines[lines.size() - 1].end < max_end)
     max_end = lines[lines.size() - 1].end - 2;
 
-  return md_scan_for_html_closer(ctx, _T("]]>"), 3, lines, off,
-                                 max_end, p_end, &ctx.html_cdata_horizon);
+  return md_scan_for_html_closer(ctx, _T("]]>"), 3, lines, off, max_end, p_end,
+                                 &ctx.html_cdata_horizon);
 }
 
 static int md_is_html_any(MD_CTX &ctx, std::span<Line> lines, OFF beg,
@@ -1312,8 +1312,7 @@ static int md_is_html_any(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   MD_ASSERT(CH(beg) == _T('<'));
   return (md_is_html_tag(ctx, lines, beg, max_end, p_end) ||
           md_is_html_comment(ctx, lines, beg, max_end, p_end) ||
-          md_is_html_processing_instruction(ctx, lines, beg, max_end,
-                                            p_end) ||
+          md_is_html_processing_instruction(ctx, lines, beg, max_end, p_end) ||
           md_is_html_declaration(ctx, lines, beg, max_end, p_end) ||
           md_is_html_cdata(ctx, lines, beg, max_end, p_end));
 }
@@ -1680,7 +1679,7 @@ static int md_link_label_cmp(const CHAR *a_label, SZ a_size,
   return 0;
 }
 
-typedef struct MD_REF_DEF_LIST_tag MD_REF_DEF_LIST;
+typedef struct MD_REF_DEF_LIST_tag Ref_Def_List;
 struct MD_REF_DEF_LIST_tag {
   int n_ref_defs;
   int alloc_ref_defs;
@@ -1745,7 +1744,7 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
   for (i = 0; i < ctx.n_ref_defs; i++) {
     MD_REF_DEF *def = &ctx.ref_defs[i];
     void *bucket;
-    MD_REF_DEF_LIST *list;
+    Ref_Def_List *list;
 
     def->hash = md_link_label_hash(def->label, def->label_size);
     bucket = ctx.ref_def_hashtable[def->hash % ctx.ref_def_hashtable_size];
@@ -1770,8 +1769,8 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
       }
 
       /* Make the bucket complex, i.e. able to hold more ref. defs. */
-      list = (MD_REF_DEF_LIST *)malloc(sizeof(MD_REF_DEF_LIST) +
-                                       2 * sizeof(MD_REF_DEF *));
+      list = (Ref_Def_List *)malloc(sizeof(Ref_Def_List) +
+                                    2 * sizeof(MD_REF_DEF *));
       if (list == nullptr) {
         MD_LOG("malloc() failed.");
         goto abort;
@@ -1790,12 +1789,11 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
      * iterating over the complex bucket. Below, we revisit all the complex
      * buckets and handle it more cheaply after the complex bucket contents
      * is sorted. */
-    list = (MD_REF_DEF_LIST *)bucket;
+    list = (Ref_Def_List *)bucket;
     if (list->n_ref_defs >= list->alloc_ref_defs) {
       int alloc_ref_defs = list->alloc_ref_defs + list->alloc_ref_defs / 2;
-      MD_REF_DEF_LIST *list_tmp = (MD_REF_DEF_LIST *)realloc(
-          list,
-          sizeof(MD_REF_DEF_LIST) + alloc_ref_defs * sizeof(MD_REF_DEF *));
+      Ref_Def_List *list_tmp = (Ref_Def_List *)realloc(
+          list, sizeof(Ref_Def_List) + alloc_ref_defs * sizeof(MD_REF_DEF *));
       if (list_tmp == nullptr) {
         MD_LOG("realloc() failed.");
         goto abort;
@@ -1812,7 +1810,7 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
   /* Sort the complex buckets so we can use bsearch() with them. */
   for (i = 0; i < ctx.ref_def_hashtable_size; i++) {
     void *bucket = ctx.ref_def_hashtable[i];
-    MD_REF_DEF_LIST *list;
+    Ref_Def_List *list;
 
     if (bucket == nullptr)
       continue;
@@ -1820,7 +1818,7 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
         (MD_REF_DEF *)bucket < ctx.ref_defs + ctx.n_ref_defs)
       continue;
 
-    list = (MD_REF_DEF_LIST *)bucket;
+    list = (Ref_Def_List *)bucket;
     qsort(list->ref_defs, list->n_ref_defs, sizeof(MD_REF_DEF *),
           md_ref_def_cmp_for_sort);
 
@@ -1880,7 +1878,7 @@ static const MD_REF_DEF *md_lookup_ref_def(MD_CTX &ctx, const CHAR *label,
     else
       return nullptr;
   } else {
-    MD_REF_DEF_LIST *list = (MD_REF_DEF_LIST *)bucket;
+    Ref_Def_List *list = (Ref_Def_List *)bucket;
     MD_REF_DEF key_buf;
     const MD_REF_DEF *key = &key_buf;
     const MD_REF_DEF **ret;
@@ -1913,17 +1911,17 @@ struct MD_LINK_ATTR_tag {
 
   CHAR *title;
   SZ title_size;
-  int title_needs_free;
+  bool title_needs_free;
 };
 
-static int md_is_link_label(MD_CTX &ctx, std::span<Line> lines,
-                            OFF beg, OFF *p_end, int *p_beg_line_index,
+static int md_is_link_label(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                            OFF *p_end, int *p_beg_line_index,
                             int *p_end_line_index, OFF *p_contents_beg,
                             OFF *p_contents_end) {
   OFF off = beg;
   OFF contents_beg = 0;
   OFF contents_end = 0;
-  int line_index = 0;
+  size_t line_index = 0;
   int len = 0;
 
   if (CH(off) != _T('['))
@@ -2072,13 +2070,13 @@ static inline int md_is_link_destination(MD_CTX &ctx, OFF beg, OFF max_end,
                                     p_contents_end);
 }
 
-static int md_is_link_title(MD_CTX &ctx, std::span<Line> lines,
-                            OFF beg, OFF *p_end, int *p_beg_line_index,
+static int md_is_link_title(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                            OFF *p_end, int *p_beg_line_index,
                             int *p_end_line_index, OFF *p_contents_beg,
                             OFF *p_contents_end) {
   OFF off = beg;
   CHAR closer_char;
-  int line_index = 0;
+  size_t line_index = 0;
 
   /* White space with up to one line break. */
   while (off < lines[line_index].end && ISWHITESPACE(off))
@@ -2147,7 +2145,7 @@ static int md_is_link_title(MD_CTX &ctx, std::span<Line> lines,
  *
  * Returns -1 in case of an error (out of memory).
  */
-static bool md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) {
+static int md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) {
   OFF label_contents_beg;
   OFF label_contents_end;
   int label_contents_line_index = -1;
@@ -2233,8 +2231,8 @@ static bool md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) 
 
   if (label_is_multiline) {
     MD_CHECK(md_merge_lines_alloc(ctx, label_contents_beg, label_contents_end,
-    lines.subspan(label_contents_line_index), _T(' '),
-                                  &def->label, &def->label_size));
+                                  lines.subspan(label_contents_line_index),
+                                  _T(' '), &def->label, &def->label_size));
     def->label_needs_free = true;
   } else {
     def->label = (CHAR *)STR(label_contents_beg);
@@ -2243,8 +2241,8 @@ static bool md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) 
 
   if (title_is_multiline) {
     MD_CHECK(md_merge_lines_alloc(ctx, title_contents_beg, title_contents_end,
-    lines.subspan(title_contents_line_index), _T('\n'),
-                                  &def->title, &def->title_size));
+                                  lines.subspan(title_contents_line_index),
+                                  _T('\n'), &def->title, &def->title_size));
     def->title_needs_free = true;
   } else {
     def->title = (CHAR *)STR(title_contents_beg);
@@ -2267,11 +2265,9 @@ abort:
   return ret;
 }
 
-static int md_is_link_reference(MD_CTX &ctx, std::span<Line> lines,
-                                OFF beg, OFF end, MD_LINK_ATTR *attr) {
+static int md_is_link_reference(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                                OFF end, MD_LINK_ATTR *attr) {
   const MD_REF_DEF *def;
-  const Line &beg_line{lines[0]};
-  const Line *end_line;
   CHAR *label;
   SZ label_size;
   int ret;
@@ -2283,19 +2279,20 @@ static int md_is_link_reference(MD_CTX &ctx, std::span<Line> lines,
   end--;
 
   /* Find lines corresponding to the beg and end positions. */
-  MD_ASSERT(lines[0].beg <= beg);
-  while (beg >= beg_line.end)
-    beg_line++;
+  MD_ASSERT(lines.front().beg <= beg);
+  const auto &beg_line_iter{std::ranges::find_if_not(
+      lines, [beg](const Line &line) { return beg >= line.end; })};
+  const Line &beg_line{*beg_line_iter};
 
-  MD_ASSERT(end <= lines[lines.size() - 1].end);
-  end_line = beg_line;
-  while (end >= end_line.end)
-    end_line++;
+  MD_ASSERT(end <= lines.back().end);
+  const Line &end_line = *std::ranges::find_if_not(
+      beg_line_iter, lines.end(),
+      [end](const Line &line) { return end >= line.end; });
 
   if (beg_line != end_line) {
-    MD_CHECK(md_merge_lines_alloc(ctx, beg, end, beg_line,
-                                  (int)(n_lines - (beg_line - lines)), _T(' '),
-                                  &label, &label_size));
+    MD_CHECK(md_merge_lines_alloc(ctx, beg, end,
+                                  std::span(beg_line_iter, lines.end()),
+                                  _T(' '), &label, &label_size));
   } else {
     label = (CHAR *)STR(beg);
     label_size = end - beg;
@@ -2319,9 +2316,9 @@ abort:
   return ret;
 }
 
-static bool md_is_inline_link_spec(MD_CTX &ctx, std::span<Line> lines,
-                                   OFF beg, OFF *p_end, MD_LINK_ATTR *attr) {
-  int line_index = 0;
+static bool md_is_inline_link_spec(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+                                   OFF *p_end, MD_LINK_ATTR *attr) {
+  size_t line_index = 0;
   int tmp_line_index;
   OFF title_contents_beg;
   OFF title_contents_end;
@@ -2401,8 +2398,8 @@ static bool md_is_inline_link_spec(MD_CTX &ctx, std::span<Line> lines,
     attr->title_needs_free = false;
   } else {
     MD_CHECK(md_merge_lines_alloc(ctx, title_contents_beg, title_contents_end,
-    lines.subspan(title_contents_line_index), _T('\n'),
-                                  &attr->title, &attr->title_size));
+                                  lines.subspan(title_contents_line_index),
+                                  _T('\n'), &attr->title, &attr->title_size));
     attr->title_needs_free = true;
   }
 
@@ -2810,7 +2807,7 @@ static int md_is_code_span(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   int has_space_before_closer = false;
   int has_eol_before_closer = false;
   int has_only_space = true;
-  int line_index = 0;
+  size_t line_index = 0;
 
   line_end = lines[0].end;
   opener_end = opener_beg;
@@ -3022,7 +3019,7 @@ static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
   OFF codespan_last_potential_closers[CODESPAN_MARK_MAXLEN] = {0};
   bool codespan_scanned_till_paragraph_end = false;
 
-  for (auto& line : lines) {
+  for (auto &line : lines) {
     OFF off = line.beg;
     OFF line_end = line.end;
 
@@ -3039,7 +3036,9 @@ static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
 #define IS_MARK_CHAR(off) (ctx.mark_char_map[(unsigned char)CH(off)])
 #endif
 
-      /* Optimization: Use some loop unrolling. */
+      /* Optimization: Use some loop unrolling.
+      Update: perhaps manual loop unrolling is not needed in modern C++
+      compilers */
       while (off + 3 < line_end && !IS_MARK_CHAR(off + 0) &&
              !IS_MARK_CHAR(off + 1) && !IS_MARK_CHAR(off + 2) &&
              !IS_MARK_CHAR(off + 3))
@@ -3144,8 +3143,8 @@ static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
         OFF opener_beg, opener_end;
         OFF closer_beg, closer_end;
         bool is_code_span = md_is_code_span(
-            ctx, lines.subspan(i), off, &opener_beg, &opener_end,
-            &closer_beg, &closer_end, codespan_last_potential_closers,
+            ctx, lines.subspan(i), off, &opener_beg, &opener_end, &closer_beg,
+            &closer_end, codespan_last_potential_closers,
             codespan_scanned_till_paragraph_end);
         if (is_code_span) {
           PUSH_MARK(_T('`'), opener_beg, opener_end,
@@ -3158,9 +3157,12 @@ static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
           off = closer_end;
 
           /* Advance the current line accordingly. */
+          auto &&tmp_iter{lines.begin()};
+          while (*tmp_iter != line)
+            tmp_iter++;
           while (off > line_end) {
             i++;
-            line++;
+            line = *tmp_iter++;
             line_end = line.end;
           }
           continue;
@@ -3209,9 +3211,12 @@ static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
             off = html_end;
 
             /* Advance the current line accordingly. */
+            auto &&tmp_iter{lines.begin()};
+            while (*tmp_iter != line)
+              tmp_iter++;
             while (off > line_end) {
               i++;
-              line++;
+              line = *tmp_iter++;
               line_end = line.end;
             }
             continue;
@@ -3451,7 +3456,8 @@ static void md_analyze_bracket(MD_CTX &ctx, int mark_index) {
 }
 
 /* Forward declaration. */
-static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines, int mark_beg, int mark_end);
+static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines,
+                                     int mark_beg, int mark_end);
 
 static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
   int opener_index = ctx.unresolved_link_head;
@@ -3564,8 +3570,7 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
         if (delim != nullptr) {
           delim->flags |= MD_MARK_RESOLVED;
           md_rollback(ctx, opener_index, delim_index, MD_ROLLBACK_ALL);
-          md_analyze_link_contents(ctx, lines,  opener_index + 1,
-                                   closer_index);
+          md_analyze_link_contents(ctx, lines, opener_index + 1, closer_index);
         } else {
           md_rollback(ctx, opener_index, closer_index, MD_ROLLBACK_ALL);
         }
@@ -3578,12 +3583,12 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
     if (next_opener != nullptr && next_opener->beg == closer->end) {
       if (next_closer->beg > closer->end + 1) {
         /* Might be full reference link. */
-        is_link = md_is_link_reference(ctx, lines,  next_opener->beg,
+        is_link = md_is_link_reference(ctx, lines, next_opener->beg,
                                        next_closer->end, &attr);
       } else {
         /* Might be shortcut reference link. */
-        is_link = md_is_link_reference(ctx, lines,  opener->beg,
-                                       closer->end, &attr);
+        is_link =
+            md_is_link_reference(ctx, lines, opener->beg, closer->end, &attr);
       }
 
       if (not is_link)
@@ -3642,8 +3647,8 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
 
       if (!is_link) {
         /* Might be collapsed reference link. */
-        is_link = md_is_link_reference(ctx, lines, opener->beg,
-                                       closer->end, &attr);
+        is_link =
+            md_is_link_reference(ctx, lines, opener->beg, closer->end, &attr);
         if (not is_link)
           return -1;
       }
@@ -3675,8 +3680,7 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
         last_img_end = closer->end;
       }
 
-      md_analyze_link_contents(ctx, lines, opener_index + 1,
-                               closer_index);
+      md_analyze_link_contents(ctx, lines, opener_index + 1, closer_index);
 
       /* If the link text is formed by nothing but permissive autolink,
        * suppress the autolink.
@@ -3715,7 +3719,7 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
 /* Analyze whether the mark '&' starts a HTML entity.
  * If so, update its flags as well as flags of corresponding closer ';'. */
 static void md_analyze_entity(MD_CTX &ctx, int mark_index) {
-  MD_MARK &opener {ctx.marks[mark_index]};
+  MD_MARK &opener{ctx.marks[mark_index]};
   OFF off;
 
   /* Cannot be entity if there is no closer as the next mark.
@@ -3727,7 +3731,7 @@ static void md_analyze_entity(MD_CTX &ctx, int mark_index) {
    */
   if (mark_index + 1 >= ctx.n_marks)
     return;
-  MD_MARK &closer {ctx.marks[mark_index + 1]};
+  MD_MARK &closer{ctx.marks[mark_index + 1]};
   if (closer.ch != ';')
     return;
 
@@ -4121,7 +4125,8 @@ abort:
   return ret;
 }
 
-static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines, int mark_beg, int mark_end) {
+static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines,
+                                     int mark_beg, int mark_end) {
   int i;
 
   md_analyze_marks(ctx, lines, mark_beg, mark_end, _T("*_~$@:."));
@@ -4184,7 +4189,7 @@ abort:
 /* Render the output, accordingly to the analyzed ctx.marks. */
 static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
   MD_TEXTTYPE text_type;
-  const Line &line {lines[0]};
+  Line &line{lines[0]};
   MD_MARK *prev_mark = nullptr;
   MD_MARK *mark;
   OFF off = lines[0].beg;
@@ -4334,8 +4339,12 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
 
         /* link/image closer may span multiple lines. */
         if (mark->ch == ']') {
-          while (mark->end > line.end)
-            line++;
+          while (mark->end > line.end) {
+            auto &&tmp_iter{lines.begin()};
+            while (*tmp_iter != line)
+              tmp_iter++;
+            line = *tmp_iter++;
+          }
         }
 
         break;
@@ -4462,7 +4471,10 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
       }
 
       /* Move to the next line. */
-      line++;
+      auto &&tmp_iter{lines.begin()};
+      while (*tmp_iter != line)
+        tmp_iter++;
+      line = *tmp_iter++;
       off = line.beg;
 
       enforce_hardbreak = 0;
@@ -4519,8 +4531,10 @@ static int md_process_table_cell(MD_CTX &ctx, MD_BLOCKTYPE cell_type,
   line.beg = beg;
   line.end = end;
 
+  Line dummy[1]{line};
+
   MD_ENTER_BLOCK(cell_type, &det);
-  MD_CHECK(md_process_normal_block_contents(ctx, std::array{line}));
+  MD_CHECK(md_process_normal_block_contents(ctx, dummy));
   MD_LEAVE_BLOCK(cell_type, &det);
 
 abort:
@@ -4536,10 +4550,11 @@ static int md_process_table_row(MD_CTX &ctx, MD_BLOCKTYPE cell_type, OFF beg,
 
   line.beg = beg;
   line.end = end;
+  Line dummy[1]{line};
 
   /* Break the line into table cells by identifying pipe characters who
    * form the cell boundary. */
-  MD_CHECK(md_analyze_inlines(ctx, std::array{line}, true));
+  MD_CHECK(md_analyze_inlines(ctx, dummy, true));
 
   /* We have to remember the cell boundaries in local buffer because
    * ctx.marks[] shall be reused during cell contents processing. */
@@ -4584,10 +4599,9 @@ abort:
   return ret;
 }
 
-static int md_process_table_block_contents(MD_CTX &ctx, int col_count,
+static int md_process_table_block_contents(MD_CTX &ctx, unsigned col_count,
                                            std::span<Line> lines) {
   Align *align;
-  int i;
   int ret = 0;
 
   /* At least two lines have to be present: The column headers and the line
@@ -4610,9 +4624,9 @@ static int md_process_table_block_contents(MD_CTX &ctx, int col_count,
 
   if (lines.size() > 2) {
     MD_ENTER_BLOCK(BlockType::table_body, nullptr);
-    for (const auto& line : lines.subspan(2)) {
-      MD_CHECK(md_process_table_row(ctx, BlockType::td, line.beg,
-                                    line.end, align, col_count));
+    for (const auto &line : lines.subspan(2)) {
+      MD_CHECK(md_process_table_row(ctx, BlockType::td, line.beg, line.end,
+                                    align, col_count));
     }
     MD_LEAVE_BLOCK(BlockType::table_body, nullptr);
   }
@@ -4662,11 +4676,12 @@ struct MD_CONTAINER_tag {
   OFF task_mark_off;
 };
 
-static int md_process_normal_block_contents(MD_CTX &ctx, std::span<Line> lines) {
+static int md_process_normal_block_contents(MD_CTX &ctx,
+                                            std::span<Line> lines) {
   int i;
   int ret;
 
-  MD_CHECK(md_analyze_inlines(ctx, lines,  false));
+  MD_CHECK(md_analyze_inlines(ctx, lines, false));
   MD_CHECK(md_process_inlines(ctx, lines));
 
 abort:
@@ -4679,18 +4694,16 @@ abort:
   return ret;
 }
 
-static int md_process_verbatim_block_contents(MD_CTX &ctx,
-                                              MD_TEXTTYPE text_type,
-                                              const MD_VERBATIMLINE *lines, int n_lines) {
+static int
+md_process_verbatim_block_contents(MD_CTX &ctx, MD_TEXTTYPE text_type,
+                                   std::span<MD_VERBATIMLINE> lines) {
   static const CHAR indent_chunk_str[] = _T("                ");
   static const SZ indent_chunk_size = SIZEOF_ARRAY(indent_chunk_str) - 1;
 
-  int i;
   int ret = 0;
 
-  for (i = 0; i < n_lines; i++) {
-    const MD_VERBATIMLINE *line = &lines[i];
-    int indent = line->indent;
+  for (auto& line: lines) {
+    int indent = line.indent;
 
     MD_ASSERT(indent >= 0);
 
@@ -4703,7 +4716,7 @@ static int md_process_verbatim_block_contents(MD_CTX &ctx,
       MD_TEXT(text_type, indent_chunk_str, indent);
 
     /* Output the code line itself. */
-    MD_TEXT_INSECURE(text_type, STR(line->beg), line->end - line->beg);
+    MD_TEXT_INSECURE(text_type, STR(line.beg), line.end - line.beg);
 
     /* Enforce end-of-line. */
     MD_TEXT(text_type, _T("\n"), 1);
@@ -4714,20 +4727,23 @@ abort:
 }
 
 static int md_process_code_block_contents(MD_CTX &ctx, int is_fenced,
-                                          const MD_VERBATIMLINE *lines, int n_lines) {
+                                          std::span<MD_VERBATIMLINE> lines) {
+  auto line_iter{lines.begin()};
+  // TODO: kludge
+  auto n_lines{lines.size()};
   if (is_fenced) {
     /* Skip the first line in case of fenced code: It is the fence.
      * (Only the starting fence is present due to logic in md_analyze_line().)
      */
-    lines++;
+    line_iter++;
     n_lines--;
   } else {
     /* Ignore blank lines at start/end of indented code block. */
-    while (n_lines > 0 && lines[0].beg == lines[0].end) {
-      lines++;
+    while (line_iter->beg == line_iter->end) {
+      line_iter++;
       n_lines--;
     }
-    while (n_lines > 0 && lines[n_lines - 1].beg == lines[n_lines - 1].end) {
+    while (lines.back().beg == lines.back().end) {
       n_lines--;
     }
   }
@@ -4735,8 +4751,8 @@ static int md_process_code_block_contents(MD_CTX &ctx, int is_fenced,
   if (n_lines == 0)
     return 0;
 
-  return md_process_verbatim_block_contents(ctx, TextType::code, lines,
-                                            n_lines);
+  return md_process_verbatim_block_contents(
+      ctx, TextType::code, std::span(line_iter, line_iter + n_lines));
 }
 
 static int md_setup_fenced_code_detail(MD_CTX &ctx, const MD_BLOCK *block,
@@ -4803,16 +4819,15 @@ static int md_process_leaf_block(MD_CTX &ctx, const MD_BLOCK *block) {
     if (block->data != 0) {
       // memset(&det.code, 0, sizeof(code_Detail));
       clean_fence_code_detail = true;
-      MD_CHECK(md_setup_fenced_code_detail(ctx, block,
-                                           &std::get<code_Detail>(det),
-                                           &info_build, &lang_build));
+      MD_CHECK(md_setup_fenced_code_detail(
+          ctx, block, &std::get<code_Detail>(det), &info_build, &lang_build));
     }
     break;
 
   case BlockType::table:
     det = table_Detail{.col_count = block->data,
-                          .head_row_count = 1,
-                          .body_row_count = block->n_lines - 2};
+                       .head_row_count = 1,
+                       .body_row_count = block->n_lines - 2};
     /*
      table_Detail& table {std::get<table_Detail>(detail)};
       table.col_count = block->data;
@@ -4826,7 +4841,7 @@ static int md_process_leaf_block(MD_CTX &ctx, const MD_BLOCK *block) {
   }
 
   if (!is_in_tight_list || block->type != BlockType::paragraph)
-    MD_ENTER_BLOCK(block->type, static_cast<void*>(&det));
+    MD_ENTER_BLOCK(block->type, static_cast<void *>(&det));
 
   /* Process the block contents accordingly to is type. */
   switch (block->type) {
@@ -4836,29 +4851,37 @@ static int md_process_leaf_block(MD_CTX &ctx, const MD_BLOCK *block) {
 
   case BlockType::code:
     MD_CHECK(md_process_code_block_contents(
-        ctx, (block->data != 0), (const MD_VERBATIMLINE *)(block + 1),
-        block->n_lines));
+        ctx, (block->data != 0),
+        std::span((MD_VERBATIMLINE *)(block + 1), block->n_lines)));
     break;
 
   case BlockType::raw_html:
     MD_CHECK(md_process_verbatim_block_contents(
-        ctx, TextType::raw_html, (const MD_VERBATIMLINE *)(block + 1),
-        block->n_lines));
+        ctx, TextType::raw_html, std::span((MD_VERBATIMLINE *)(block + 1), block->n_lines)));
     break;
 
   case BlockType::table:
-    MD_CHECK(md_process_table_block_contents(
-        ctx, block->data, (const Line *)(block + 1), block->n_lines));
+    /* XXX: probably a terrible alternative to making each function take a
+       std::span<const Line>... */
+    {
+      auto tmp = const_cast<Line *>(reinterpret_cast<const Line *>(block + 1));
+      std::span lines(tmp, block->n_lines);
+      MD_CHECK(md_process_table_block_contents(ctx, block->data, lines));
+    }
     break;
 
   default:
-    MD_CHECK(md_process_normal_block_contents(ctx, (const Line *)(block + 1),
-                                              block->n_lines));
+    // See above comment.
+    {
+      auto tmp = const_cast<Line *>(reinterpret_cast<const Line *>(block + 1));
+      std::span lines(tmp, block->n_lines);
+      MD_CHECK(md_process_normal_block_contents(ctx, lines));
+    }
     break;
   }
 
   if (!is_in_tight_list || block->type != BlockType::paragraph)
-    MD_LEAVE_BLOCK(block->type, static_cast<void*>(&det));
+    MD_LEAVE_BLOCK(block->type, static_cast<void *>(&det));
 
 abort:
   if (clean_fence_code_detail) {
@@ -4888,13 +4911,13 @@ static int md_process_all_blocks(MD_CTX &ctx) {
 
     switch (block->type) {
     case BlockType::ul:
-      det.ul.is_tight = (block->flags & MD_BLOCK_LOOSE_LIST) ? false : true;
+      det.ul.is_tight = !(block->flags & MD_BLOCK_LOOSE_LIST);
       det.ul.mark = (CHAR)block->data;
       break;
 
     case BlockType::ol:
       det.ol.start = block->n_lines;
-      det.ol.is_tight = (block->flags & MD_BLOCK_LOOSE_LIST) ? false : true;
+      det.ol.is_tight = !(block->flags & MD_BLOCK_LOOSE_LIST);
       det.ol.mark_delimiter = (CHAR)block->data;
       break;
 
@@ -5043,17 +5066,26 @@ static int md_start_new_block(MD_CTX &ctx, const MD_LINE_ANALYSIS *line) {
  * a paragraph.)
  */
 static int md_consume_link_reference_definitions(MD_CTX &ctx) {
-  Line *lines = (Line *)(ctx.current_block + 1);
-  int n_lines = ctx.current_block->n_lines;
-  int n = 0;
+  /* XXX: WTF? current_block's type is MD_BLOCK*, which when deferenced,
+  contains the following memebers, with sizeof(MD_BLOCK)==8:
+  BlockType type : 8;
+  unsigned flags : 8;
+  unsigned data : 16;
+  unsigned n_lines; Probably dangerous assumption that sizeof(unsigned)==4 for
+  all platforms
+  How does this even convert to a Line*? sizeof(Line)==8, because
+  it contains two members of type MD_OFFSET ~= unsigned (sizeof == 4)
+  Also, does +1 increment the address by 1, or by sizeof(MD_BLOCK)?
+  */
+  Line *li = reinterpret_cast<Line *>(ctx.current_block + 1);
+  std::span lines(li, ctx.current_block->n_lines);
+  unsigned n = 0;
 
   /* Compute how many lines at the start of the block form one or more
    * reference definitions. */
-  while (n < n_lines) {
-    int n_link_ref_lines;
-
-    n_link_ref_lines =
-        md_is_link_reference_definition(ctx, lines + n, n_lines - n);
+  while (n < lines.size()) {
+    int n_link_ref_lines =
+        md_is_link_reference_definition(ctx, lines.subspan(n));
     /* Not a reference definition? */
     if (n_link_ref_lines == 0)
       break;
@@ -5069,14 +5101,15 @@ static int md_consume_link_reference_definitions(MD_CTX &ctx) {
   /* If there was at least one reference definition, we need to remove
    * its lines from the block, or perhaps even the whole block. */
   if (n > 0) {
-    if (n == n_lines) {
+    if (n == lines.size()) {
       /* Remove complete block. */
       ctx.n_block_bytes -= n * sizeof(Line);
       ctx.n_block_bytes -= sizeof(MD_BLOCK);
       ctx.current_block = nullptr;
     } else {
       /* Remove just some initial lines from the block. */
-      memmove(lines, lines + n, (n_lines - n) * sizeof(Line));
+      // TODO: get rid of memmove
+      memmove(li, li + n, (lines.size() - n) * sizeof(Line));
       ctx.current_block->n_lines -= n;
       ctx.n_block_bytes -= n * sizeof(Line);
     }
@@ -5097,8 +5130,8 @@ static int md_end_current_block(MD_CTX &ctx) {
   if (ctx.current_block->type == BlockType::paragraph ||
       (ctx.current_block->type == BlockType::heading &&
        (ctx.current_block->flags & MD_BLOCK_SETEXT_HEADER))) {
-    Line *lines = (Line *)(ctx.current_block + 1);
-    if (CH(lines[0].beg) == _T('[')) {
+    Line &line = *(Line *)(ctx.current_block + 1);
+    if (CH(line.beg) == _T('[')) {
       MD_CHECK(md_consume_link_reference_definitions(ctx));
       if (ctx.current_block == nullptr)
         return ret;
@@ -5107,7 +5140,7 @@ static int md_end_current_block(MD_CTX &ctx) {
 
   if (ctx.current_block->type == BlockType::heading &&
       (ctx.current_block->flags & MD_BLOCK_SETEXT_HEADER)) {
-    int n_lines = ctx.current_block->n_lines;
+    unsigned n_lines = ctx.current_block->n_lines;
 
     if (n_lines > 1) {
       /* Get rid of the underline. */
@@ -5483,8 +5516,9 @@ static unsigned short md_is_html_block_start_condition(MD_CTX &ctx, OFF beg) {
   /* Check for type 7: any COMPLETE other opening or closing tag. */
   if (off + 1 < ctx.size) {
     OFF end;
+    Line *dummy = nullptr;
 
-    if (md_is_html_tag(ctx, nullptr, 0, beg, ctx.size, &end)) {
+    if (md_is_html_tag(ctx, std::span(dummy, 0), beg, ctx.size, &end)) {
       /* Only optional whitespace and new line may follow. */
       while (end < ctx.size && ISWHITESPACE(end))
         end++;
@@ -6392,6 +6426,9 @@ abort:
 /********************
  ***  Public API  ***
  ********************/
+int md_parse(mdstringview text, const MD_PARSER &parser, void *userdata) {
+  return md_parse(text.data(), text.size(), &parser, userdata);
+}
 
 int md_parse(const MD_CHAR *text, MD_SIZE size, const MD_PARSER *parser,
              void *userdata) {
