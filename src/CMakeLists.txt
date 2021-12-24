@@ -21,7 +21,7 @@ set_target_properties(md4c PROPERTIES
 configure_file(md4c-html.pc.in md4c-html.pc @ONLY)
 add_library(md4c-html md4c-html.cpp md4c-html.h entity.cpp entity.h)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(md4c PRIVATE -Wall -Wextra -pedantic)
+    target_compile_options(md4c-html PRIVATE -Wall -Wextra -pedantic)
 endif()
 target_compile_features(md4c-html PRIVATE cxx_std_20)
 set_target_properties(md4c-html PROPERTIES

@@ -276,7 +276,7 @@ using li_Detail = _MD_BLOCK_LI_DETAIL;
 /* Detailed info for MD_BLOCK_H. */
 struct _MD_BLOCK_H_DETAIL {
   unsigned short level; /* Header level (1 - 6) */
-} ;
+};
 using h_Detail = _MD_BLOCK_H_DETAIL;
 
 /* Detailed info for MD_BLOCK_CODE. */
@@ -285,7 +285,7 @@ struct _MD_BLOCK_CODE_DETAIL {
   Attribute lang;
   MD_CHAR fence_char; /* The character used for fenced code block; or zero for
                          indented code block. */
-} ;
+};
 using code_Detail = _MD_BLOCK_CODE_DETAIL;
 
 /* Detailed info for MD_BLOCK_TABLE. */
@@ -294,19 +294,19 @@ struct _MD_BLOCK_TABLE_DETAIL {
   unsigned head_row_count; /* Count of rows in the table header (currently
                               always 1) */
   unsigned body_row_count; /* Count of rows in the table body */
-} ;
+};
 using table_Detail = _MD_BLOCK_TABLE_DETAIL;
 
 /* Detailed info for MD_BLOCK_TH and MD_BLOCK_TD. */
 struct _MD_BLOCK_TD_DETAIL {
   Align align;
-} ;
+};
 using td_Detail = _MD_BLOCK_TD_DETAIL;
 /* Detailed info for MD_SPAN_A. */
 struct _MD_SPAN_A_DETAIL {
   Attribute href;
   Attribute title;
-} ;
+};
 using a_Detail = _MD_SPAN_A_DETAIL;
 
 /* Detailed info for MD_SPAN_IMG. */
@@ -353,6 +353,15 @@ using Wikilink_Detail = _MD_SPAN_WIKILINK;
 #define MD_FLAG_UNDERLINE                                                      \
   0x4000 /* Enable underline extension (and disables '_' for normal emphasis). \
           */
+#define MD_FLAG_ABBREVIATIONS                                                  \
+  0x10000 /* Allow abbreviations using Markdown Extra's                        \
+syntax Example: *[HTML]: Hyper Text Markup Language -> <abbr title="Hyper      \
+Text Markup Language">HTML</abbr> */
+#define MD_FLAG_INLINE_DIFF                                                    \
+  0x20000 /* Display Git-style additions and deletions in inline text          \
+as having green and red backgrounds, respectively.  */
+#define MD_FLAG_COLOR 0x40000 /* Render RGB and HSL values in HTML output */
+#define MD_FLAG_TOC 0x100000  /* Generate table of contents from headings */
 
 #define MD_FLAG_PERMISSIVEAUTOLINKS                                            \
   (MD_FLAG_PERMISSIVEEMAILAUTOLINKS | MD_FLAG_PERMISSIVEURLAUTOLINKS |         \
@@ -372,10 +381,12 @@ using Wikilink_Detail = _MD_SPAN_WIKILINK;
 #define MD_DIALECT_GITHUB                                                      \
   (MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_TABLES | MD_FLAG_STRIKETHROUGH |      \
    MD_FLAG_TASKLISTS)
+#define MD_DIALECT_GITLAB                                                      \
+  MD_DIALECT_GITHUB | MD_FLAG_INLINE_DIFF | MD_FLAG_COLOR
 
 /* Parser structure.
  */
-struct MD_PARSER {
+struct _MD_PARSER {
   /* Reserved. Set to zero.
    */
   unsigned abi_version;
@@ -399,18 +410,15 @@ struct MD_PARSER {
    * Any rendering callback may abort further parsing of the document by
    * returning non-zero.
    */
-  int (*enter_block)(MD_BLOCKTYPE /*type*/, void * /*detail*/,
+  int (*enter_block)(BlockType /*type*/, void * /*detail*/,
                      void * /*userdata*/);
-  int (*leave_block)(MD_BLOCKTYPE /*type*/, void * /*detail*/,
+  int (*leave_block)(BlockType /*type*/, void * /*detail*/,
                      void * /*userdata*/);
 
-  int (*enter_span)(MD_SPANTYPE /*type*/, void * /*detail*/,
-                    void * /*userdata*/);
-  int (*leave_span)(MD_SPANTYPE /*type*/, void * /*detail*/,
-                    void * /*userdata*/);
+  int (*enter_span)(SpanType /*type*/, void * /*detail*/, void * /*userdata*/);
+  int (*leave_span)(SpanType /*type*/, void * /*detail*/, void * /*userdata*/);
 
-  int (*text)(MD_TEXTTYPE /*type*/, const MD_CHAR * /*text*/, MD_SIZE /*size*/,
-              void * /*userdata*/);
+  int (*text)(TextType /*type*/, mdstringview, void * /*userdata*/);
 
   /* Debug callback. Optional (may be NULL).
    *
@@ -425,18 +433,18 @@ struct MD_PARSER {
    */
   void (*syntax)(void);
 };
-using MD_PARSER = MD_PARSER;
+using MD_PARSER = _MD_PARSER;
 
-/* Parse the Markdown document stored in the string 'text' of size 'size'.
- * The parser provides callbacks to be called during the parsing so the
- * caller can render the document on the screen or convert the Markdown
- * to another format.
+/* Parse the Markdown document passed in mdstringview type (aka
+ * std::basic_string_view<MD_CHAR>). The parser provides callbacks to be called
+ * during the parsing so the caller can render the document on the screen or
+ * convert the Markdown to another format.
  *
  * Zero is returned on success. If a runtime error occurs (e.g. a memory
  * fails), -1 is returned. If the processing is aborted due any callback
  * returning non-zero, the return value of the callback is returned.
  */
-int md_parse(mdstringview, const MD_PARSER& parser, void* uerdata);
+int md_parse(mdstringview, const MD_PARSER &parser, void *uerdata);
 
 extern "C" {
 int md_parse(const MD_CHAR *text, MD_SIZE size, const MD_PARSER *parser,

@@ -2175,7 +2175,7 @@ constexpr std::optional<entity> lookup(std::string_view name) {
 
 extern "C" {
 const struct entity *entity_lookup(const char *name, size_t name_size) {
-  const auto ret{lookup(name)};
+  const auto&& ret{lookup(name)};
   return ret ? &*ret : nullptr;
 }
 }

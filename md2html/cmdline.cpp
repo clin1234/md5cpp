@@ -35,19 +35,18 @@
 
 #define CMDLINE_AUXBUF_SIZE 32
 
-static int cmdline_handle_short_opt_group(
-    const std::array<CMDLINE_OPTION, 26>& options, const char *arggroup,
-    int (*callback)(int /*optval*/, const char * /*arg*/, void * /*userdata*/),
-    void *userdata) {
-  int i;
+static int cmdline_handle_short_opt_group(const auto &options,
+                                          const char *arggroup,
+                                          callback callback, void *userdata) {
   int ret = 0;
 
-  for (i = 0; arggroup[i] != '\0'; i++) {
-      for (const auto& opt : options)
-          while (opt.id != 0)
-            if (arggroup[i] == opt.shortname) break;
+  for (unsigned i = 0; arggroup[i] != '\0'; i++) {
+    for (const auto &opt : options)
+      while (opt.id != 0)
+        if (arggroup[i] == opt.shortname)
+          break;
 
-    const auto& opt {options[0]};
+    const auto &opt{options[0]};
     if (opt.id != 0 && !(opt.flags & CMDLINE_OPTFLAG_REQUIREDARG))
       ret = callback(opt.id, nullptr, userdata);
     else {
@@ -68,16 +67,14 @@ static int cmdline_handle_short_opt_group(
   return ret;
 }
 
-int cmdline_read(const std::array<CMDLINE_OPTION, 26> &options, int argc,
-                 char **argv,
-                 int (*callback)(int /*optval*/, const char * /*arg*/,
-                                 void * /*userdata*/),
+int cmdline_read(const auto &options, int argc, char **argv, callback callback,
                  void *userdata) {
   char auxbuf[CMDLINE_AUXBUF_SIZE + 1];
   int fast_optarg_decision = 1;
   int after_doubledash = 0;
   int i = 1;
   int ret = 0;
+  decltype(options) l;
 
   auxbuf[CMDLINE_AUXBUF_SIZE] = '\0';
 

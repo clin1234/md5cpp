@@ -25,7 +25,7 @@
 
 #include "md4c.h"
 
-/* 
+/*
 On G++ 12.0.0 snapshot 20211121 targeting x86_64-w64-mingw32,
 this header is needed to find std::ranges::find_if_not.
 */
@@ -136,10 +136,10 @@ this header is needed to find std::ranges::find_if_not.
 #define SZ MD_SIZE
 #define OFF MD_OFFSET
 
-typedef struct MD_MARK_tag MD_MARK;
-typedef struct MD_BLOCK_tag MD_BLOCK;
-typedef struct MD_CONTAINER_tag MD_CONTAINER;
-typedef struct MD_REF_DEF_tag MD_REF_DEF;
+typedef struct MD_MARK_tag Mark;
+typedef struct MD_BLOCK_tag Block;
+typedef struct MD_CONTAINER_tag Container;
+typedef struct MD_REF_DEF_tag Ref_Def;
 
 /* During analyzes of inline marks, we need to manage some "mark chains",
  * of (yet unresolved) openers. This structure holds start/end of the chain.
@@ -152,7 +152,7 @@ struct MD_MARKCHAIN_tag {
 };
 
 /* Context propagated through all the parsing. */
-typedef struct MD_CTX_tag MD_CTX;
+typedef struct MD_CTX_tag Parsing_Context;
 struct MD_CTX_tag {
   /* Immutable stuff (parameters of md_parse()). */
   const CHAR *text;
@@ -168,7 +168,7 @@ struct MD_CTX_tag {
   unsigned alloc_buffer;
 
   /* Reference definitions. */
-  MD_REF_DEF *ref_defs;
+  Ref_Def *ref_defs;
   int n_ref_defs;
   int alloc_ref_defs;
   void **ref_def_hashtable;
@@ -178,7 +178,7 @@ struct MD_CTX_tag {
    * This is only used for parsing a single block contents but by storing it
    * here we may reuse the stack for subsequent blocks; i.e. we have fewer
    * (re)allocations. */
-  MD_MARK *marks;
+  Mark *marks;
   int n_marks;
   int alloc_marks;
 
@@ -226,17 +226,17 @@ struct MD_CTX_tag {
    *      instead of MD_LINE(s).
    */
   void *block_bytes;
-  MD_BLOCK *current_block;
+  Block *current_block;
   int n_block_bytes;
   int alloc_block_bytes;
 
   /* For container block analysis. */
-  MD_CONTAINER *containers;
+  Container *containers;
   int n_containers;
   int alloc_containers;
 
   /* Minimal indentation to call the block "indented code block". */
-  unsigned code_indent_offset;
+  OFF code_indent_offset;
 
   /* Contextual info for line analysis. */
   SZ code_fence_length; /* For checking closing fence length. */
@@ -360,7 +360,7 @@ static inline int md_ascii_eq(const CHAR *s1, const CHAR *s2, SZ n) {
   return memcmp(s1, s2, n * sizeof(CHAR)) == 0;
 }
 
-static int md_text_with_null_replacement(MD_CTX &ctx, MD_TEXTTYPE type,
+static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
                                          const CHAR *str, SZ size) {
   OFF off = 0;
   int ret = 0;
@@ -370,7 +370,7 @@ static int md_text_with_null_replacement(MD_CTX &ctx, MD_TEXTTYPE type,
       off++;
 
     if (off > 0) {
-      ret = ctx.parser.text(type, str, off, ctx.userdata);
+      ret = ctx.parser.text(type, mdstringview(str, off), ctx.userdata);
       if (ret != 0)
         return ret;
 
@@ -382,7 +382,7 @@ static int md_text_with_null_replacement(MD_CTX &ctx, MD_TEXTTYPE type,
     if (off >= size)
       return 0;
 
-    ret = ctx.parser.text(TextType::null_char, _T(""), 1, ctx.userdata);
+    ret = ctx.parser.text(TextType::null_char, _T(""), ctx.userdata);
     if (ret != 0)
       return ret;
     off++;
@@ -450,10 +450,10 @@ static int md_text_with_null_replacement(MD_CTX &ctx, MD_TEXTTYPE type,
     }                                                                          \
   } while (0)
 
-#define MD_TEXT(type, str, size)                                               \
+#define MD_TEXT(type, str)                                                     \
   do {                                                                         \
-    if (size > 0) {                                                            \
-      ret = ctx.parser.text((type), (str), (size), ctx.userdata);              \
+    if (str.size() > 0) {                                                      \
+      ret = ctx.parser.text((type), (str), ctx.userdata);                      \
       if (ret != 0) {                                                          \
         MD_LOG("Aborted from text() callback.");                               \
         goto abort;                                                            \
@@ -921,7 +921,7 @@ static unsigned md_decode_utf8__(const CHAR *str, SZ str_size, SZ *p_size) {
   return (unsigned)str[0];
 }
 
-static unsigned md_decode_utf8_before__(MD_CTX &ctx, OFF off) {
+static unsigned md_decode_utf8_before__(Parsing_Context &ctx, OFF off) {
   if (!IS_UTF8_LEAD1(CH(off - 1))) {
     if (off > 1 && IS_UTF8_LEAD2(CH(off - 2)) && IS_UTF8_TAIL(CH(off - 1)))
       return (((unsigned int)CH(off - 2) & 0x1f) << 6) |
@@ -994,7 +994,7 @@ static inline unsigned md_decode_unicode(const CHAR *str, OFF off, SZ str_size,
  * (Given the output is always shorter then input, (end - beg) is good idea
  * what the caller should allocate.)
  */
-static void md_merge_lines(MD_CTX &ctx, OFF beg, OFF end, std::span<Line> lines,
+static void md_merge_lines(Parsing_Context &ctx, OFF beg, OFF end, std::span<Line> lines,
                            CHAR line_break_replacement_char, CHAR *buffer,
                            SZ *p_size) {
   CHAR *ptr = buffer;
@@ -1028,7 +1028,7 @@ static void md_merge_lines(MD_CTX &ctx, OFF beg, OFF end, std::span<Line> lines,
 
 /* Wrapper of md_merge_lines() which allocates new buffer for the output string.
  */
-static int md_merge_lines_alloc(MD_CTX &ctx, OFF beg, OFF end,
+static int md_merge_lines_alloc(Parsing_Context &ctx, OFF beg, OFF end,
                                 std::span<Line> lines,
                                 CHAR line_break_replacement_char, CHAR **p_str,
                                 SZ *p_size) {
@@ -1073,7 +1073,7 @@ static OFF md_skip_unicode_whitespace(const CHAR *label, OFF off, SZ size) {
  * in that case the whole tag has to live on a single line. We distinguish this
  * by lines.size == 0.
  */
-static int md_is_html_tag(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_html_tag(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                           OFF max_end, OFF *p_end) {
   int attr_state;
   OFF off = beg;
@@ -1192,7 +1192,7 @@ done:
   return true;
 }
 
-static int md_scan_for_html_closer(MD_CTX &ctx, const MD_CHAR *str, MD_SIZE len,
+static int md_scan_for_html_closer(Parsing_Context &ctx, const MD_CHAR *str, MD_SIZE len,
                                    std::span<Line> lines, OFF beg, OFF max_end,
                                    OFF *p_end, OFF *p_scan_horizon) {
   OFF off = beg;
@@ -1225,7 +1225,7 @@ static int md_scan_for_html_closer(MD_CTX &ctx, const MD_CHAR *str, MD_SIZE len,
   }
 }
 
-static int md_is_html_comment(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_html_comment(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                               OFF max_end, OFF *p_end) {
   OFF off = beg;
 
@@ -1257,7 +1257,7 @@ static int md_is_html_comment(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   return false;
 }
 
-static int md_is_html_processing_instruction(MD_CTX &ctx, std::span<Line> lines,
+static int md_is_html_processing_instruction(Parsing_Context &ctx, std::span<Line> lines,
                                              OFF beg, OFF max_end, OFF *p_end) {
   OFF off = beg;
 
@@ -1271,7 +1271,7 @@ static int md_is_html_processing_instruction(MD_CTX &ctx, std::span<Line> lines,
                                  &ctx.html_proc_instr_horizon);
 }
 
-static int md_is_html_declaration(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_html_declaration(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                                   OFF max_end, OFF *p_end) {
   OFF off = beg;
 
@@ -1294,7 +1294,7 @@ static int md_is_html_declaration(MD_CTX &ctx, std::span<Line> lines, OFF beg,
                                  &ctx.html_decl_horizon);
 }
 
-static int md_is_html_cdata(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_html_cdata(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                             OFF max_end, OFF *p_end) {
   static const CHAR open_str[] = _T("<![CDATA[");
   static const SZ open_size = SIZEOF_ARRAY(open_str) - 1;
@@ -1314,7 +1314,7 @@ static int md_is_html_cdata(MD_CTX &ctx, std::span<Line> lines, OFF beg,
                                  &ctx.html_cdata_horizon);
 }
 
-static int md_is_html_any(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_html_any(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                           OFF max_end, OFF *p_end) {
   MD_ASSERT(CH(beg) == _T('<'));
   return (md_is_html_tag(ctx, lines, beg, max_end, p_end) ||
@@ -1328,7 +1328,7 @@ static int md_is_html_any(MD_CTX &ctx, std::span<Line> lines, OFF beg,
  ***  Recognizing Entity  ***
  ****************************/
 
-static int md_is_hex_entity_contents(MD_CTX &ctx, const CHAR *text, OFF beg,
+static int md_is_hex_entity_contents(Parsing_Context &ctx, const CHAR *text, OFF beg,
                                      OFF max_end, OFF *p_end) {
   OFF off = beg;
   MD_UNUSED(ctx);
@@ -1343,7 +1343,7 @@ static int md_is_hex_entity_contents(MD_CTX &ctx, const CHAR *text, OFF beg,
     return false;
 }
 
-static int md_is_dec_entity_contents(MD_CTX &ctx, const CHAR *text, OFF beg,
+static int md_is_dec_entity_contents(Parsing_Context &ctx, const CHAR *text, OFF beg,
                                      OFF max_end, OFF *p_end) {
   OFF off = beg;
   MD_UNUSED(ctx);
@@ -1359,7 +1359,7 @@ static int md_is_dec_entity_contents(MD_CTX &ctx, const CHAR *text, OFF beg,
   }
 }
 
-static int md_is_named_entity_contents(MD_CTX &ctx, const CHAR *text, OFF beg,
+static int md_is_named_entity_contents(Parsing_Context &ctx, const CHAR *text, OFF beg,
                                        OFF max_end, OFF *p_end) {
   OFF off = beg;
   MD_UNUSED(ctx);
@@ -1380,7 +1380,7 @@ static int md_is_named_entity_contents(MD_CTX &ctx, const CHAR *text, OFF beg,
   }
 }
 
-static int md_is_entity_str(MD_CTX &ctx, const CHAR *text, OFF beg, OFF max_end,
+static int md_is_entity_str(Parsing_Context &ctx, const CHAR *text, OFF beg, OFF max_end,
                             OFF *p_end) {
   int is_contents;
   OFF off = beg;
@@ -1404,7 +1404,7 @@ static int md_is_entity_str(MD_CTX &ctx, const CHAR *text, OFF beg, OFF max_end,
   }
 }
 
-static inline int md_is_entity(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end) {
+static inline int md_is_entity(Parsing_Context &ctx, OFF beg, OFF max_end, OFF *p_end) {
   return md_is_entity_str(ctx, ctx.text, beg, max_end, p_end);
 }
 
@@ -1425,7 +1425,7 @@ struct MD_ATTRIBUTE_BUILD_tag {
 
 #define MD_BUILD_ATTR_NO_ESCAPES 0x0001
 
-static int md_build_attr_append_substr(MD_CTX &ctx, MD_ATTRIBUTE_BUILD *build,
+static int md_build_attr_append_substr(Parsing_Context &ctx, MD_ATTRIBUTE_BUILD *build,
                                        MD_TEXTTYPE type, OFF off) {
   if (build->substr_count >= build->substr_alloc) {
     MD_TEXTTYPE *new_substr_types;
@@ -1459,7 +1459,7 @@ static int md_build_attr_append_substr(MD_CTX &ctx, MD_ATTRIBUTE_BUILD *build,
   return 0;
 }
 
-static void md_free_attribute(MD_CTX &ctx, MD_ATTRIBUTE_BUILD *build) {
+static void md_free_attribute(Parsing_Context &ctx, MD_ATTRIBUTE_BUILD *build) {
   MD_UNUSED(ctx);
 
   if (build->substr_alloc > 0) {
@@ -1469,7 +1469,7 @@ static void md_free_attribute(MD_CTX &ctx, MD_ATTRIBUTE_BUILD *build) {
   }
 }
 
-static int md_build_attribute(MD_CTX &ctx, const CHAR *raw_text, SZ raw_size,
+static int md_build_attribute(Parsing_Context &ctx, const CHAR *raw_text, SZ raw_size,
                               unsigned flags, Attribute *attr,
                               MD_ATTRIBUTE_BUILD *build) {
   OFF raw_off, off;
@@ -1690,12 +1690,12 @@ typedef struct MD_REF_DEF_LIST_tag Ref_Def_List;
 struct MD_REF_DEF_LIST_tag {
   int n_ref_defs;
   int alloc_ref_defs;
-  MD_REF_DEF *ref_defs[]; /* Valid items always  point into ctx.ref_defs[] */
+  Ref_Def *ref_defs[]; /* Valid items always  point into ctx.ref_defs[] */
 };
 
 static int md_ref_def_cmp(const void *a, const void *b) {
-  const MD_REF_DEF *a_ref = *(const MD_REF_DEF **)a;
-  const MD_REF_DEF *b_ref = *(const MD_REF_DEF **)b;
+  const Ref_Def *a_ref = *(const Ref_Def **)a;
+  const Ref_Def *b_ref = *(const Ref_Def **)b;
 
   if (a_ref->hash < b_ref->hash)
     return -1;
@@ -1713,8 +1713,8 @@ static int md_ref_def_cmp_for_sort(const void *a, const void *b) {
 
   /* Ensure stability of the sorting. */
   if (cmp == 0) {
-    const MD_REF_DEF *a_ref = *(const MD_REF_DEF **)a;
-    const MD_REF_DEF *b_ref = *(const MD_REF_DEF **)b;
+    const Ref_Def *a_ref = *(const Ref_Def **)a;
+    const Ref_Def *b_ref = *(const Ref_Def **)b;
 
     if (a_ref < b_ref)
       cmp = -1;
@@ -1727,7 +1727,7 @@ static int md_ref_def_cmp_for_sort(const void *a, const void *b) {
   return cmp;
 }
 
-static int md_build_ref_def_hashtable(MD_CTX &ctx) {
+static int md_build_ref_def_hashtable(Parsing_Context &ctx) {
   int i, j;
 
   if (ctx.n_ref_defs == 0)
@@ -1749,7 +1749,7 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
    *     such MD_REF_DEFs.
    */
   for (i = 0; i < ctx.n_ref_defs; i++) {
-    MD_REF_DEF *def = &ctx.ref_defs[i];
+    Ref_Def *def = &ctx.ref_defs[i];
     void *bucket;
     Ref_Def_List *list;
 
@@ -1762,12 +1762,12 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
       continue;
     }
 
-    if (ctx.ref_defs <= (MD_REF_DEF *)bucket &&
-        (MD_REF_DEF *)bucket < ctx.ref_defs + ctx.n_ref_defs) {
+    if (ctx.ref_defs <= (Ref_Def *)bucket &&
+        (Ref_Def *)bucket < ctx.ref_defs + ctx.n_ref_defs) {
       /* The bucket already contains one ref. def. Lets see whether it
        * is the same label (ref. def. duplicate) or different one
        * (hash conflict). */
-      MD_REF_DEF *old_def = (MD_REF_DEF *)bucket;
+      Ref_Def *old_def = (Ref_Def *)bucket;
 
       if (md_link_label_cmp(def->label, def->label_size, old_def->label,
                             old_def->label_size) == 0) {
@@ -1777,7 +1777,7 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
 
       /* Make the bucket complex, i.e. able to hold more ref. defs. */
       list = (Ref_Def_List *)malloc(sizeof(Ref_Def_List) +
-                                    2 * sizeof(MD_REF_DEF *));
+                                    2 * sizeof(Ref_Def *));
       if (list == nullptr) {
         MD_LOG("malloc() failed.");
         goto abort;
@@ -1800,7 +1800,7 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
     if (list->n_ref_defs >= list->alloc_ref_defs) {
       int alloc_ref_defs = list->alloc_ref_defs + list->alloc_ref_defs / 2;
       Ref_Def_List *list_tmp = (Ref_Def_List *)realloc(
-          list, sizeof(Ref_Def_List) + alloc_ref_defs * sizeof(MD_REF_DEF *));
+          list, sizeof(Ref_Def_List) + alloc_ref_defs * sizeof(Ref_Def *));
       if (list_tmp == nullptr) {
         MD_LOG("realloc() failed.");
         goto abort;
@@ -1821,12 +1821,12 @@ static int md_build_ref_def_hashtable(MD_CTX &ctx) {
 
     if (bucket == nullptr)
       continue;
-    if (ctx.ref_defs <= (MD_REF_DEF *)bucket &&
-        (MD_REF_DEF *)bucket < ctx.ref_defs + ctx.n_ref_defs)
+    if (ctx.ref_defs <= (Ref_Def *)bucket &&
+        (Ref_Def *)bucket < ctx.ref_defs + ctx.n_ref_defs)
       continue;
 
     list = (Ref_Def_List *)bucket;
-    qsort(list->ref_defs, list->n_ref_defs, sizeof(MD_REF_DEF *),
+    qsort(list->ref_defs, list->n_ref_defs, sizeof(Ref_Def *),
           md_ref_def_cmp_for_sort);
 
     /* Disable all duplicates in the complex bucket by forcing all such
@@ -1845,7 +1845,7 @@ abort:
   return -1;
 }
 
-static void md_free_ref_def_hashtable(MD_CTX &ctx) {
+static void md_free_ref_def_hashtable(Parsing_Context &ctx) {
   if (ctx.ref_def_hashtable != nullptr) {
     int i;
 
@@ -1853,8 +1853,8 @@ static void md_free_ref_def_hashtable(MD_CTX &ctx) {
       void *bucket = ctx.ref_def_hashtable[i];
       if (bucket == nullptr)
         continue;
-      if (ctx.ref_defs <= (MD_REF_DEF *)bucket &&
-          (MD_REF_DEF *)bucket < ctx.ref_defs + ctx.n_ref_defs)
+      if (ctx.ref_defs <= (Ref_Def *)bucket &&
+          (Ref_Def *)bucket < ctx.ref_defs + ctx.n_ref_defs)
         continue;
       free(bucket);
     }
@@ -1863,7 +1863,7 @@ static void md_free_ref_def_hashtable(MD_CTX &ctx) {
   }
 }
 
-static const MD_REF_DEF *md_lookup_ref_def(MD_CTX &ctx, const CHAR *label,
+static const Ref_Def *md_lookup_ref_def(Parsing_Context &ctx, const CHAR *label,
                                            SZ label_size) {
   unsigned hash;
   void *bucket;
@@ -1876,9 +1876,9 @@ static const MD_REF_DEF *md_lookup_ref_def(MD_CTX &ctx, const CHAR *label,
 
   if (bucket == nullptr) {
     return nullptr;
-  } else if (ctx.ref_defs <= (MD_REF_DEF *)bucket &&
-             (MD_REF_DEF *)bucket < ctx.ref_defs + ctx.n_ref_defs) {
-    const MD_REF_DEF *def = (MD_REF_DEF *)bucket;
+  } else if (ctx.ref_defs <= (Ref_Def *)bucket &&
+             (Ref_Def *)bucket < ctx.ref_defs + ctx.n_ref_defs) {
+    const Ref_Def *def = (Ref_Def *)bucket;
 
     if (md_link_label_cmp(def->label, def->label_size, label, label_size) == 0)
       return def;
@@ -1886,16 +1886,16 @@ static const MD_REF_DEF *md_lookup_ref_def(MD_CTX &ctx, const CHAR *label,
       return nullptr;
   } else {
     Ref_Def_List *list = (Ref_Def_List *)bucket;
-    MD_REF_DEF key_buf;
-    const MD_REF_DEF *key = &key_buf;
-    const MD_REF_DEF **ret;
+    Ref_Def key_buf;
+    const Ref_Def *key = &key_buf;
+    const Ref_Def **ret;
 
     key_buf.label = (CHAR *)label;
     key_buf.label_size = label_size;
     key_buf.hash = md_link_label_hash(key_buf.label, key_buf.label_size);
 
-    ret = (const MD_REF_DEF **)bsearch(&key, list->ref_defs, list->n_ref_defs,
-                                       sizeof(MD_REF_DEF *), md_ref_def_cmp);
+    ret = (const Ref_Def **)bsearch(&key, list->ref_defs, list->n_ref_defs,
+                                       sizeof(Ref_Def *), md_ref_def_cmp);
     if (ret != nullptr)
       return *ret;
     else
@@ -1921,7 +1921,7 @@ struct MD_LINK_ATTR_tag {
   bool title_needs_free;
 };
 
-static int md_is_link_label(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_link_label(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                             OFF *p_end, int *p_beg_line_index,
                             int *p_end_line_index, OFF *p_contents_beg,
                             OFF *p_contents_end) {
@@ -1993,7 +1993,7 @@ static int md_is_link_label(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   return false;
 }
 
-static int md_is_link_destination_A(MD_CTX &ctx, OFF beg, OFF max_end,
+static int md_is_link_destination_A(Parsing_Context &ctx, OFF beg, OFF max_end,
                                     OFF *p_end, OFF *p_contents_beg,
                                     OFF *p_contents_end) {
   OFF off = beg;
@@ -2025,7 +2025,7 @@ static int md_is_link_destination_A(MD_CTX &ctx, OFF beg, OFF max_end,
   return false;
 }
 
-static int md_is_link_destination_B(MD_CTX &ctx, OFF beg, OFF max_end,
+static int md_is_link_destination_B(Parsing_Context &ctx, OFF beg, OFF max_end,
                                     OFF *p_end, OFF *p_contents_beg,
                                     OFF *p_contents_end) {
   OFF off = beg;
@@ -2066,7 +2066,7 @@ static int md_is_link_destination_B(MD_CTX &ctx, OFF beg, OFF max_end,
   return true;
 }
 
-static inline int md_is_link_destination(MD_CTX &ctx, OFF beg, OFF max_end,
+static inline int md_is_link_destination(Parsing_Context &ctx, OFF beg, OFF max_end,
                                          OFF *p_end, OFF *p_contents_beg,
                                          OFF *p_contents_end) {
   if (CH(beg) == _T('<'))
@@ -2077,7 +2077,7 @@ static inline int md_is_link_destination(MD_CTX &ctx, OFF beg, OFF max_end,
                                     p_contents_end);
 }
 
-static int md_is_link_title(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_link_title(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                             OFF *p_end, int *p_beg_line_index,
                             int *p_end_line_index, OFF *p_contents_beg,
                             OFF *p_contents_end) {
@@ -2152,7 +2152,7 @@ static int md_is_link_title(MD_CTX &ctx, std::span<Line> lines, OFF beg,
  *
  * Returns -1 in case of an error (out of memory).
  */
-static int md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) {
+static int md_is_link_reference_definition(Parsing_Context &ctx, std::span<Line> lines) {
   OFF label_contents_beg;
   OFF label_contents_end;
   int label_contents_line_index = -1;
@@ -2166,7 +2166,7 @@ static int md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) {
   OFF off;
   int line_index = 0;
   int tmp_line_index;
-  MD_REF_DEF *def = nullptr;
+  Ref_Def *def = nullptr;
   int ret = 0;
 
   /* Link label. */
@@ -2219,13 +2219,13 @@ static int md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) {
 
   /* So, it _is_ a reference definition. Remember it. */
   if (ctx.n_ref_defs >= ctx.alloc_ref_defs) {
-    MD_REF_DEF *new_defs;
+    Ref_Def *new_defs;
 
     ctx.alloc_ref_defs =
         (ctx.alloc_ref_defs > 0 ? ctx.alloc_ref_defs + ctx.alloc_ref_defs / 2
                                 : 16);
-    new_defs = (MD_REF_DEF *)realloc(ctx.ref_defs,
-                                     ctx.alloc_ref_defs * sizeof(MD_REF_DEF));
+    new_defs = (Ref_Def *)realloc(ctx.ref_defs,
+                                     ctx.alloc_ref_defs * sizeof(Ref_Def));
     if (new_defs == nullptr) {
       MD_LOG("realloc() failed.");
       goto abort;
@@ -2234,7 +2234,7 @@ static int md_is_link_reference_definition(MD_CTX &ctx, std::span<Line> lines) {
     ctx.ref_defs = new_defs;
   }
   def = &ctx.ref_defs[ctx.n_ref_defs];
-  memset(def, 0, sizeof(MD_REF_DEF));
+  memset(def, 0, sizeof(Ref_Def));
 
   if (label_is_multiline) {
     MD_CHECK(md_merge_lines_alloc(ctx, label_contents_beg, label_contents_end,
@@ -2272,9 +2272,9 @@ abort:
   return ret;
 }
 
-static int md_is_link_reference(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_link_reference(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                                 OFF end, MD_LINK_ATTR *attr) {
-  const MD_REF_DEF *def;
+  const Ref_Def *def;
   CHAR *label;
   SZ label_size;
   int ret;
@@ -2323,7 +2323,7 @@ abort:
   return ret;
 }
 
-static bool md_is_inline_link_spec(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static bool md_is_inline_link_spec(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                                    OFF *p_end, MD_LINK_ATTR *attr) {
   size_t line_index = 0;
   int tmp_line_index;
@@ -2417,11 +2417,11 @@ abort:
   return ret;
 }
 
-static void md_free_ref_defs(MD_CTX &ctx) {
+static void md_free_ref_defs(Parsing_Context &ctx) {
   int i;
 
   for (i = 0; i < ctx.n_ref_defs; i++) {
-    MD_REF_DEF *def = &ctx.ref_defs[i];
+    Ref_Def *def = &ctx.ref_defs[i];
 
     if (def->label_needs_free)
       free(def->label);
@@ -2530,7 +2530,7 @@ struct MD_MARK_tag {
 #define MD_MARK_AUTOLINK 0x20                /* Distinguisher for '<', '>'. */
 #define MD_MARK_VALIDPERMISSIVEAUTOLINK 0x20 /* For permissive autolinks. */
 
-static MD_MARKCHAIN *md_asterisk_chain(MD_CTX &ctx, unsigned flags) {
+static MD_MARKCHAIN *md_asterisk_chain(Parsing_Context &ctx, unsigned flags) {
   switch (flags & (MD_MARK_EMPH_INTRAWORD | MD_MARK_EMPH_MOD3_MASK)) {
   case MD_MARK_EMPH_INTRAWORD | MD_MARK_EMPH_MOD3_0:
     return &ASTERISK_OPENERS_intraword_mod3_0;
@@ -2550,8 +2550,8 @@ static MD_MARKCHAIN *md_asterisk_chain(MD_CTX &ctx, unsigned flags) {
   return nullptr;
 }
 
-static MD_MARKCHAIN *md_mark_chain(MD_CTX &ctx, int mark_index) {
-  MD_MARK *mark = &ctx.marks[mark_index];
+static MD_MARKCHAIN *md_mark_chain(Parsing_Context &ctx, int mark_index) {
+  Mark *mark = &ctx.marks[mark_index];
 
   switch (mark->ch) {
   case _T('*'):
@@ -2569,14 +2569,14 @@ static MD_MARKCHAIN *md_mark_chain(MD_CTX &ctx, int mark_index) {
   }
 }
 
-static MD_MARK *md_push_mark(MD_CTX &ctx) {
+static Mark *md_push_mark(Parsing_Context &ctx) {
   if (ctx.n_marks >= ctx.alloc_marks) {
-    MD_MARK *new_marks;
+    Mark *new_marks;
 
     ctx.alloc_marks =
         (ctx.alloc_marks > 0 ? ctx.alloc_marks + ctx.alloc_marks / 2 : 64);
     new_marks =
-        (MD_MARK *)realloc(ctx.marks, ctx.alloc_marks * sizeof(MD_MARK));
+        (Mark *)realloc(ctx.marks, ctx.alloc_marks * sizeof(Mark));
     if (new_marks == nullptr) {
       MD_LOG("realloc() failed.");
       return nullptr;
@@ -2608,7 +2608,7 @@ static MD_MARK *md_push_mark(MD_CTX &ctx) {
     mark->flags = (flags_);                                                    \
   } while (0)
 
-static void md_mark_chain_append(MD_CTX &ctx, MD_MARKCHAIN *chain,
+static void md_mark_chain_append(Parsing_Context &ctx, MD_MARKCHAIN *chain,
                                  int mark_index) {
   if (chain->tail >= 0)
     ctx.marks[chain->tail].next = mark_index;
@@ -2623,8 +2623,8 @@ static void md_mark_chain_append(MD_CTX &ctx, MD_MARKCHAIN *chain,
 /* Sometimes, we need to store a pointer into the mark. It is quite rare
  * so we do not bother to make MD_MARK use union, and it can only happen
  * for dummy marks. */
-static inline void md_mark_store_ptr(MD_CTX &ctx, int mark_index, void *ptr) {
-  MD_MARK *mark = &ctx.marks[mark_index];
+static inline void md_mark_store_ptr(Parsing_Context &ctx, int mark_index, void *ptr) {
+  Mark *mark = &ctx.marks[mark_index];
   MD_ASSERT(mark->ch == 'D');
 
   /* Check only members beg and end are misused for this. */
@@ -2632,18 +2632,18 @@ static inline void md_mark_store_ptr(MD_CTX &ctx, int mark_index, void *ptr) {
   memcpy(mark, &ptr, sizeof(void *));
 }
 
-static inline void *md_mark_get_ptr(MD_CTX &ctx, int mark_index) {
+static inline void *md_mark_get_ptr(Parsing_Context &ctx, int mark_index) {
   void *ptr;
-  MD_MARK *mark = &ctx.marks[mark_index];
+  Mark *mark = &ctx.marks[mark_index];
   MD_ASSERT(mark->ch == 'D');
   memcpy(&ptr, mark, sizeof(void *));
   return ptr;
 }
 
-static void md_resolve_range(MD_CTX &ctx, MD_MARKCHAIN *chain, int opener_index,
+static void md_resolve_range(Parsing_Context &ctx, MD_MARKCHAIN *chain, int opener_index,
                              int closer_index) {
-  MD_MARK *opener = &ctx.marks[opener_index];
-  MD_MARK *closer = &ctx.marks[closer_index];
+  Mark *opener = &ctx.marks[opener_index];
+  Mark *closer = &ctx.marks[closer_index];
 
   /* Remove opener from the list of openers. */
   if (chain != nullptr) {
@@ -2683,7 +2683,7 @@ static void md_resolve_range(MD_CTX &ctx, MD_MARKCHAIN *chain, int opener_index,
  *     in (1) are discarded. I.e. pairs of openers and closers which are both
  *     inside the range are retained as well as any unpaired marks.
  */
-static void md_rollback(MD_CTX &ctx, int opener_index, int closer_index,
+static void md_rollback(Parsing_Context &ctx, int opener_index, int closer_index,
                         int how) {
   int i;
   int mark_index;
@@ -2705,7 +2705,7 @@ static void md_rollback(MD_CTX &ctx, int opener_index, int closer_index,
    * respective chains, in the right order. */
   mark_index = closer_index - 1;
   while (mark_index > opener_index) {
-    MD_MARK *mark = &ctx.marks[mark_index];
+    Mark *mark = &ctx.marks[mark_index];
     int mark_flags = mark->flags;
     int discard_flag = (how == MD_ROLLBACK_ALL);
 
@@ -2714,7 +2714,7 @@ static void md_rollback(MD_CTX &ctx, int opener_index, int closer_index,
 
       /* Undo opener BEFORE the range. */
       if (mark_opener_index < opener_index) {
-        MD_MARK *mark_opener = &ctx.marks[mark_opener_index];
+        Mark *mark_opener = &ctx.marks[mark_opener_index];
         MD_MARKCHAIN *chain;
 
         mark_opener->flags &=
@@ -2748,7 +2748,7 @@ static void md_rollback(MD_CTX &ctx, int opener_index, int closer_index,
   }
 }
 
-static void md_build_mark_char_map(MD_CTX &ctx) {
+static void md_build_mark_char_map(Parsing_Context &ctx) {
   memset(ctx.mark_char_map, 0, sizeof(ctx.mark_char_map));
 
   ctx.mark_char_map['\\'] = 1;
@@ -2798,7 +2798,7 @@ static void md_build_mark_char_map(MD_CTX &ctx) {
  * resolving would be then O(n^2). */
 #define CODESPAN_MARK_MAXLEN 32
 
-static int md_is_code_span(MD_CTX &ctx, std::span<Line> lines, OFF beg,
+static int md_is_code_span(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                            OFF *p_opener_beg, OFF *p_opener_end,
                            OFF *p_closer_beg, OFF *p_closer_end,
                            OFF last_potential_closers[CODESPAN_MARK_MAXLEN],
@@ -2915,7 +2915,7 @@ static int md_is_code_span(MD_CTX &ctx, std::span<Line> lines, OFF beg,
   return true;
 }
 
-static int md_is_autolink_uri(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end) {
+static int md_is_autolink_uri(Parsing_Context &ctx, OFF beg, OFF max_end, OFF *p_end) {
   OFF off = beg + 1;
 
   MD_ASSERT(CH(beg) == _T('<'));
@@ -2952,7 +2952,7 @@ static int md_is_autolink_uri(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end) {
   return true;
 }
 
-static int md_is_autolink_email(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end) {
+static int md_is_autolink_email(Parsing_Context &ctx, OFF beg, OFF max_end, OFF *p_end) {
   OFF off = beg + 1;
   int label_len;
 
@@ -3003,7 +3003,7 @@ static int md_is_autolink_email(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end) {
   return true;
 }
 
-static int md_is_autolink(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end,
+static int md_is_autolink(Parsing_Context &ctx, OFF beg, OFF max_end, OFF *p_end,
                           int *p_missing_mailto) {
   if (md_is_autolink_uri(ctx, beg, max_end, p_end)) {
     *p_missing_mailto = false;
@@ -3018,15 +3018,15 @@ static int md_is_autolink(MD_CTX &ctx, OFF beg, OFF max_end, OFF *p_end,
   return false;
 }
 
-static int md_collect_marks(MD_CTX &ctx, std::span<Line> lines,
+static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
                             bool table_mode) {
   int ret = 0;
-  MD_MARK *mark;
+  Mark *mark;
   OFF codespan_last_potential_closers[CODESPAN_MARK_MAXLEN] = {0};
   bool codespan_scanned_till_paragraph_end = false;
 
   for (size_t i = 0; i < lines.size(); i++) {
-    auto& line{lines[i]};
+    auto &line{lines[i]};
     OFF off = line.beg;
     OFF line_end = line.end;
 
@@ -3415,7 +3415,7 @@ abort:
   return ret;
 }
 
-static void md_analyze_bracket(MD_CTX &ctx, int mark_index) {
+static void md_analyze_bracket(Parsing_Context &ctx, int mark_index) {
   /* We cannot really resolve links here as for that we would need
    * more context. E.g. a following pair of brackets (reference link),
    * or enclosing pair of brackets (if the inner is the link, the outer
@@ -3429,7 +3429,7 @@ static void md_analyze_bracket(MD_CTX &ctx, int mark_index) {
    * The resolving itself is deferred into md_resolve_links().
    */
 
-  MD_MARK *mark = &ctx.marks[mark_index];
+  Mark *mark = &ctx.marks[mark_index];
 
   if (mark->flags & MD_MARK_POTENTIAL_OPENER) {
     md_mark_chain_append(ctx, &BRACKET_OPENERS, mark_index);
@@ -3439,7 +3439,7 @@ static void md_analyze_bracket(MD_CTX &ctx, int mark_index) {
   if (BRACKET_OPENERS.tail >= 0) {
     /* Pop the opener from the chain. */
     int opener_index = BRACKET_OPENERS.tail;
-    MD_MARK *opener = &ctx.marks[opener_index];
+    Mark *opener = &ctx.marks[opener_index];
     if (opener->prev >= 0)
       ctx.marks[opener->prev].next = -1;
     else
@@ -3463,10 +3463,10 @@ static void md_analyze_bracket(MD_CTX &ctx, int mark_index) {
 }
 
 /* Forward declaration. */
-static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines,
+static void md_analyze_link_contents(Parsing_Context &ctx, std::span<Line> lines,
                                      int mark_beg, int mark_end);
 
-static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
+static int md_resolve_links(Parsing_Context &ctx, std::span<Line> lines) {
   int opener_index = ctx.unresolved_link_head;
   OFF last_link_beg = 0;
   OFF last_link_end = 0;
@@ -3474,12 +3474,12 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
   OFF last_img_end = 0;
 
   while (opener_index >= 0) {
-    MD_MARK *opener = &ctx.marks[opener_index];
+    Mark *opener = &ctx.marks[opener_index];
     int closer_index = opener->next;
-    MD_MARK *closer = &ctx.marks[closer_index];
+    Mark *closer = &ctx.marks[closer_index];
     int next_index = opener->prev;
-    MD_MARK *next_opener;
-    MD_MARK *next_closer;
+    Mark *next_opener;
+    Mark *next_closer;
     MD_LINK_ATTR attr;
     bool is_link{};
 
@@ -3516,7 +3516,7 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
         next_closer != nullptr && /* double ']' closer */
         next_closer->ch == ']' && (next_closer->beg == closer->beg + 1) &&
         (next_closer->end - next_closer->beg == 1)) {
-      MD_MARK *delim = nullptr;
+      Mark *delim = nullptr;
       int delim_index;
       OFF dest_beg, dest_end;
 
@@ -3527,7 +3527,7 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
        * wiki-link has to be below the 100 characters.) */
       delim_index = opener_index + 1;
       while (delim_index < closer_index) {
-        MD_MARK *m = &ctx.marks[delim_index];
+        Mark *m = &ctx.marks[delim_index];
         if (m->ch == '|') {
           delim = m;
           break;
@@ -3625,7 +3625,7 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
           int i = closer_index + 1;
 
           while (i < ctx.n_marks) {
-            MD_MARK *mark = &ctx.marks[i];
+            Mark *mark = &ctx.marks[i];
 
             if (mark->beg >= inline_link_end)
               break;
@@ -3693,8 +3693,8 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
        * suppress the autolink.
        * See https://github.com/mity/md4c/issues/152 for more info. */
       if (ctx.parser.flags & MD_FLAG_PERMISSIVEAUTOLINKS) {
-        MD_MARK *first_nested;
-        MD_MARK *last_nested;
+        Mark *first_nested;
+        Mark *last_nested;
 
         first_nested = opener + 1;
         while (first_nested->ch == _T('D') && first_nested < closer)
@@ -3725,8 +3725,8 @@ static int md_resolve_links(MD_CTX &ctx, std::span<Line> lines) {
 
 /* Analyze whether the mark '&' starts a HTML entity.
  * If so, update its flags as well as flags of corresponding closer ';'. */
-static void md_analyze_entity(MD_CTX &ctx, int mark_index) {
-  MD_MARK &opener{ctx.marks[mark_index]};
+static void md_analyze_entity(Parsing_Context &ctx, int mark_index) {
+  Mark &opener{ctx.marks[mark_index]};
   OFF off;
 
   /* Cannot be entity if there is no closer as the next mark.
@@ -3738,7 +3738,7 @@ static void md_analyze_entity(MD_CTX &ctx, int mark_index) {
    */
   if (mark_index + 1 >= ctx.n_marks)
     return;
-  MD_MARK &closer{ctx.marks[mark_index + 1]};
+  Mark &closer{ctx.marks[mark_index + 1]};
   if (closer.ch != ';')
     return;
 
@@ -3750,8 +3750,8 @@ static void md_analyze_entity(MD_CTX &ctx, int mark_index) {
   }
 }
 
-static void md_analyze_table_cell_boundary(MD_CTX &ctx, int mark_index) {
-  MD_MARK *mark = &ctx.marks[mark_index];
+static void md_analyze_table_cell_boundary(Parsing_Context &ctx, int mark_index) {
+  Mark *mark = &ctx.marks[mark_index];
   mark->flags |= MD_MARK_RESOLVED;
 
   md_mark_chain_append(ctx, &TABLECELLBOUNDARIES, mark_index);
@@ -3762,28 +3762,28 @@ static void md_analyze_table_cell_boundary(MD_CTX &ctx, int mark_index) {
  * characters. May only be called if an adequate number of dummy 'D' marks
  * follows.
  */
-static int md_split_emph_mark(MD_CTX &ctx, int mark_index, SZ n) {
-  MD_MARK *mark{&ctx.marks[mark_index]};
+static int md_split_emph_mark(Parsing_Context &ctx, int mark_index, SZ n) {
+  Mark *mark{&ctx.marks[mark_index]};
   int new_mark_index = mark_index + (mark->end - mark->beg - n);
-  MD_MARK *dummy = &ctx.marks[new_mark_index];
+  Mark *dummy = &ctx.marks[new_mark_index];
 
   MD_ASSERT(mark->end - mark->beg > n);
   MD_ASSERT(dummy->ch == 'D');
 
-  memcpy(dummy, mark, sizeof(MD_MARK));
+  memcpy(dummy, mark, sizeof(Mark));
   mark->end -= n;
   dummy->beg = mark->end;
 
   return new_mark_index;
 }
 
-static void md_analyze_emph(MD_CTX &ctx, int mark_index) {
-  MD_MARK *mark = &ctx.marks[mark_index];
+static void md_analyze_emph(Parsing_Context &ctx, int mark_index) {
+  Mark *mark = &ctx.marks[mark_index];
   MD_MARKCHAIN *chain = md_mark_chain(ctx, mark_index);
 
   /* If we can be a closer, try to resolve with the preceding opener. */
   if (mark->flags & MD_MARK_POTENTIAL_CLOSER) {
-    MD_MARK *opener = nullptr;
+    Mark *opener = nullptr;
     int opener_index = 0;
 
     if (mark->ch == _T('*')) {
@@ -3810,7 +3810,7 @@ static void md_analyze_emph(MD_CTX &ctx, int mark_index) {
       for (i = 0; i < n_opener_chains; i++) {
         if (opener_chains[i]->tail >= 0) {
           int tmp_index = opener_chains[i]->tail;
-          MD_MARK *tmp_mark = &ctx.marks[tmp_index];
+          Mark *tmp_mark = &ctx.marks[tmp_index];
           if (opener == nullptr || tmp_mark->end > opener->end) {
             opener_index = tmp_index;
             opener = tmp_mark;
@@ -3849,8 +3849,8 @@ static void md_analyze_emph(MD_CTX &ctx, int mark_index) {
     md_mark_chain_append(ctx, chain, mark_index);
 }
 
-static void md_analyze_tilde(MD_CTX &ctx, int mark_index) {
-  MD_MARK *mark = &ctx.marks[mark_index];
+static void md_analyze_tilde(Parsing_Context &ctx, int mark_index) {
+  Mark *mark = &ctx.marks[mark_index];
   MD_MARKCHAIN *chain = md_mark_chain(ctx, mark_index);
 
   /* We attempt to be Github Flavored Markdown compatible here. GFM accepts
@@ -3869,7 +3869,7 @@ static void md_analyze_tilde(MD_CTX &ctx, int mark_index) {
     md_mark_chain_append(ctx, chain, mark_index);
 }
 
-static void md_analyze_dollar(MD_CTX &ctx, int mark_index) {
+static void md_analyze_dollar(Parsing_Context &ctx, int mark_index) {
   /* This should mimic the way inline equations work in LaTeX, so there
    * can only ever be one item in the chain (i.e. the dollars can't be
    * nested). This is basically the same as the md_analyze_tilde function,
@@ -3879,8 +3879,8 @@ static void md_analyze_dollar(MD_CTX &ctx, int mark_index) {
    * E.g.: $abc$$def$$ => abc (display equation) def (end equation) */
   if (DOLLAR_OPENERS.head >= 0) {
     /* If the potential closer has a non-matching number of $, discard */
-    MD_MARK *open = &ctx.marks[DOLLAR_OPENERS.head];
-    MD_MARK *close = &ctx.marks[mark_index];
+    Mark *open = &ctx.marks[DOLLAR_OPENERS.head];
+    Mark *close = &ctx.marks[mark_index];
 
     int opener_index = DOLLAR_OPENERS.head;
     md_rollback(ctx, opener_index, mark_index, MD_ROLLBACK_ALL);
@@ -3898,11 +3898,11 @@ static void md_analyze_dollar(MD_CTX &ctx, int mark_index) {
   }
 }
 
-static void md_analyze_permissive_url_autolink(MD_CTX &ctx, int mark_index) {
-  MD_MARK *opener = &ctx.marks[mark_index];
+static void md_analyze_permissive_url_autolink(Parsing_Context &ctx, int mark_index) {
+  Mark *opener = &ctx.marks[mark_index];
   int closer_index = mark_index + 1;
-  MD_MARK *closer = &ctx.marks[closer_index];
-  MD_MARK *next_resolved_mark;
+  Mark *closer = &ctx.marks[closer_index];
+  Mark *next_resolved_mark;
   OFF off = opener->end;
   int n_dots = false;
   int has_underscore_in_last_seg = false;
@@ -3985,10 +3985,10 @@ static void md_analyze_permissive_url_autolink(MD_CTX &ctx, int mark_index) {
  * instead impose stricter rules what is understood as an e-mail address
  * here. Actually any non-alphanumeric characters with exception of '.'
  * are prohibited both in username and after '@'. */
-static void md_analyze_permissive_email_autolink(MD_CTX &ctx, int mark_index) {
-  MD_MARK *opener = &ctx.marks[mark_index];
+static void md_analyze_permissive_email_autolink(Parsing_Context &ctx, int mark_index) {
+  Mark *opener = &ctx.marks[mark_index];
   int closer_index;
-  MD_MARK *closer;
+  Mark *closer;
   OFF beg = opener->beg;
   OFF end = opener->end;
   int dot_count = 0;
@@ -4028,14 +4028,14 @@ static void md_analyze_permissive_email_autolink(MD_CTX &ctx, int mark_index) {
   md_resolve_range(ctx, nullptr, mark_index, closer_index);
 }
 
-static inline void md_analyze_marks(MD_CTX &ctx, std::span<Line> lines,
+static inline void md_analyze_marks(Parsing_Context &ctx, std::span<Line> lines,
                                     int mark_beg, int mark_end,
                                     const CHAR *mark_chars) {
   int i = mark_beg;
   MD_UNUSED(lines);
 
   while (i < mark_end) {
-    MD_MARK *mark = &ctx.marks[i];
+    Mark *mark = &ctx.marks[i];
 
     /* Skip resolved spans. */
     if (mark->flags & MD_MARK_RESOLVED) {
@@ -4091,7 +4091,7 @@ static inline void md_analyze_marks(MD_CTX &ctx, std::span<Line> lines,
 }
 
 /* Analyze marks (build ctx.marks). */
-static int md_analyze_inlines(MD_CTX &ctx, std::span<Line> lines,
+static int md_analyze_inlines(Parsing_Context &ctx, std::span<Line> lines,
                               bool table_mode) {
   int ret;
 
@@ -4132,7 +4132,7 @@ abort:
   return ret;
 }
 
-static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines,
+static void md_analyze_link_contents(Parsing_Context &ctx, std::span<Line> lines,
                                      int mark_beg, int mark_end) {
   int i;
 
@@ -4144,7 +4144,7 @@ static void md_analyze_link_contents(MD_CTX &ctx, std::span<Line> lines,
   }
 }
 
-static int md_enter_leave_span_a(MD_CTX &ctx, int enter, MD_SPANTYPE type,
+static int md_enter_leave_span_a(Parsing_Context &ctx, int enter, MD_SPANTYPE type,
                                  const CHAR *dest, SZ dest_size,
                                  int prohibit_escapes_in_dest,
                                  const CHAR *title, SZ title_size) {
@@ -4174,7 +4174,7 @@ abort:
   return ret;
 }
 
-static int md_enter_leave_span_wikilink(MD_CTX &ctx, bool enter,
+static int md_enter_leave_span_wikilink(Parsing_Context &ctx, bool enter,
                                         const CHAR *target, SZ target_size) {
   MD_ATTRIBUTE_BUILD target_build{};
   Wikilink_Detail det{};
@@ -4194,11 +4194,11 @@ abort:
 }
 
 /* Render the output, accordingly to the analyzed ctx.marks. */
-static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
+static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
   MD_TEXTTYPE text_type;
   Line &line{lines[0]};
-  MD_MARK *prev_mark = nullptr;
-  MD_MARK *mark;
+  Mark *prev_mark = nullptr;
+  Mark *mark;
   OFF off = lines[0].beg;
   OFF end = lines.back().end;
   int enforce_hardbreak = 0;
@@ -4218,7 +4218,7 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
     /* Process the text up to the next mark or end-of-line. */
     OFF tmp = (line.end < mark->beg ? line.end : mark->beg);
     if (tmp > off) {
-      MD_TEXT(text_type, STR(off), tmp - off);
+      MD_TEXT(text_type, mdstringview(STR(off), tmp - off));
       off = tmp;
     }
 
@@ -4229,11 +4229,11 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
         if (ISNEWLINE(mark->beg + 1))
           enforce_hardbreak = 1;
         else
-          MD_TEXT(text_type, STR(mark->beg + 1), 1);
+          MD_TEXT(text_type, mdstringview(STR(mark->beg + 1), 1));
         break;
 
       case ' ': /* Non-trivial space. */
-        MD_TEXT(text_type, _T(" "), 1);
+        MD_TEXT(text_type, mdstringview(_T(" ")));
         break;
 
       case '`': /* Code span. */
@@ -4309,11 +4309,11 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
       case '[': /* Link, wiki link, image. */
       case '!':
       case ']': {
-        const MD_MARK *opener =
+        const Mark *opener =
             (mark->ch != ']' ? mark : &ctx.marks[mark->prev]);
-        const MD_MARK *closer = &ctx.marks[opener->next];
-        const MD_MARK *dest_mark;
-        const MD_MARK *title_mark;
+        const Mark *closer = &ctx.marks[opener->next];
+        const Mark *dest_mark;
+        const Mark *title_mark;
 
         if ((opener->ch == '[' && closer->ch == ']') &&
             opener->end - opener->beg >= 2 && closer->end - closer->beg >= 2) {
@@ -4374,9 +4374,9 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
       case ':': /* Permissive URL autolink. */
       case '.': /* Permissive WWW autolink. */
       {
-        MD_MARK *opener =
+        Mark *opener =
             ((mark->flags & MD_MARK_OPENER) ? mark : &ctx.marks[mark->prev]);
-        MD_MARK *closer = &ctx.marks[opener->next];
+        Mark *closer = &ctx.marks[opener->next];
         const CHAR *dest = STR(opener->end);
         SZ dest_size = closer->beg - opener->end;
 
@@ -4407,11 +4407,12 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
       }
 
       case '&': /* Entity. */
-        MD_TEXT(TextType::entity, STR(mark->beg), mark->end - mark->beg);
+        MD_TEXT(TextType::entity,
+                mdstringview(STR(mark->beg), mark->end - mark->beg));
         break;
 
       case '\0':
-        MD_TEXT(TextType::null_char, _T(""), 1);
+        MD_TEXT(TextType::null_char, mdstringview(_T("")));
         break;
 
       case 127:
@@ -4448,11 +4449,11 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
         while (off < ctx.size && ISBLANK(off))
           off++;
         if (off > tmp)
-          MD_TEXT(text_type, STR(tmp), off - tmp);
+          MD_TEXT(text_type, mdstringview(STR(tmp), off - tmp));
 
         /* and new lines are transformed into single spaces. */
         if (prev_mark->end < off && off < mark->beg)
-          MD_TEXT(text_type, _T(" "), 1);
+          MD_TEXT(text_type, mdstringview(_T(" ")));
       } else if (text_type == TextType::raw_html) {
         /* Inside raw HTML, we output the new line verbatim, including
          * any trailing spaces. */
@@ -4461,8 +4462,8 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
         while (tmp < end && ISBLANK(tmp))
           tmp++;
         if (tmp > off)
-          MD_TEXT(TextType::raw_html, STR(off), tmp - off);
-        MD_TEXT(TextType::raw_html, _T("\n"), 1);
+          MD_TEXT(TextType::raw_html, mdstringview(STR(off), tmp - off));
+        MD_TEXT(TextType::raw_html, mdstringview(_T("\n")));
       } else {
         /* Output soft or hard line break. */
         TextType break_type{TextType::soft_br};
@@ -4474,7 +4475,7 @@ static int md_process_inlines(MD_CTX &ctx, std::span<Line> lines) {
             break_type = TextType::br;
         }
 
-        MD_TEXT(break_type, _T("\n"), 1);
+        MD_TEXT(break_type, mdstringview(_T("\n")));
       }
 
       /* Move to the next line. */
@@ -4496,7 +4497,7 @@ abort:
  ***  Processing Tables  ***
  ***************************/
 
-static void md_analyze_table_alignment(MD_CTX &ctx, OFF beg, OFF end,
+static void md_analyze_table_alignment(Parsing_Context &ctx, OFF beg, OFF end,
                                        Align *align, int n_align) {
   static const Align align_map[] = {Align::default_align, Align::left,
                                     Align::right, Align::center};
@@ -4521,9 +4522,9 @@ static void md_analyze_table_alignment(MD_CTX &ctx, OFF beg, OFF end,
 }
 
 /* Forward declaration. */
-static int md_process_normal_block_contents(MD_CTX &ctx, std::span<Line> lines);
+static int md_process_normal_block_contents(Parsing_Context &ctx, std::span<Line> lines);
 
-static int md_process_table_cell(MD_CTX &ctx, MD_BLOCKTYPE cell_type,
+static int md_process_table_cell(Parsing_Context &ctx, MD_BLOCKTYPE cell_type,
                                  Align align, OFF beg, OFF end) {
   Line line;
   td_Detail det;
@@ -4548,7 +4549,7 @@ abort:
   return ret;
 }
 
-static int md_process_table_row(MD_CTX &ctx, MD_BLOCKTYPE cell_type, OFF beg,
+static int md_process_table_row(Parsing_Context &ctx, MD_BLOCKTYPE cell_type, OFF beg,
                                 OFF end, const Align *align, int col_count) {
   Line line;
   OFF *pipe_offs = nullptr;
@@ -4575,7 +4576,7 @@ static int md_process_table_row(MD_CTX &ctx, MD_BLOCKTYPE cell_type, OFF beg,
   j = 0;
   pipe_offs[j++] = beg;
   for (i = TABLECELLBOUNDARIES.head; i >= 0; i = ctx.marks[i].next) {
-    MD_MARK *mark = &ctx.marks[i];
+    Mark *mark = &ctx.marks[i];
     pipe_offs[j++] = mark->end;
   }
   pipe_offs[j++] = end + 1;
@@ -4606,7 +4607,7 @@ abort:
   return ret;
 }
 
-static int md_process_table_block_contents(MD_CTX &ctx, unsigned col_count,
+static int md_process_table_block_contents(Parsing_Context &ctx, unsigned col_count,
                                            std::span<Line> lines) {
   Align *align;
   int ret = 0;
@@ -4683,7 +4684,7 @@ struct MD_CONTAINER_tag {
   OFF task_mark_off;
 };
 
-static int md_process_normal_block_contents(MD_CTX &ctx,
+static int md_process_normal_block_contents(Parsing_Context &ctx,
                                             std::span<Line> lines) {
   int i;
   int ret;
@@ -4702,38 +4703,35 @@ abort:
 }
 
 static int
-md_process_verbatim_block_contents(MD_CTX &ctx, MD_TEXTTYPE text_type,
+md_process_verbatim_block_contents(Parsing_Context &ctx, MD_TEXTTYPE text_type,
                                    std::span<MD_VERBATIMLINE> lines) {
-  static const CHAR indent_chunk_str[] = _T("                ");
-  static const SZ indent_chunk_size = SIZEOF_ARRAY(indent_chunk_str) - 1;
+  static const mdstring indent_chunk_str{_T("                ")};
 
   int ret = 0;
 
-  for (auto& line: lines) {
-    int indent = line.indent;
-
-    MD_ASSERT(indent >= 0);
+  for (auto &line : lines) {
+    OFF indent = line.indent;
 
     /* Output code indentation. */
-    while (indent > (int)indent_chunk_size) {
-      MD_TEXT(text_type, indent_chunk_str, indent_chunk_size);
-      indent -= indent_chunk_size;
+    while (indent > indent_chunk_str.size()) {
+      MD_TEXT(text_type, indent_chunk_str);
+      indent -= indent_chunk_str.size();
     }
     if (indent > 0)
-      MD_TEXT(text_type, indent_chunk_str, indent);
+      MD_TEXT(text_type, indent_chunk_str.substr(0, indent));
 
     /* Output the code line itself. */
     MD_TEXT_INSECURE(text_type, STR(line.beg), line.end - line.beg);
 
     /* Enforce end-of-line. */
-    MD_TEXT(text_type, _T("\n"), 1);
+    MD_TEXT(text_type, mdstringview(_T("\n")));
   }
 
 abort:
   return ret;
 }
 
-static int md_process_code_block_contents(MD_CTX &ctx, int is_fenced,
+static int md_process_code_block_contents(Parsing_Context &ctx, int is_fenced,
                                           std::span<MD_VERBATIMLINE> lines) {
   auto line_iter{lines.begin()};
   // TODO: kludge
@@ -4762,7 +4760,7 @@ static int md_process_code_block_contents(MD_CTX &ctx, int is_fenced,
       ctx, TextType::code, std::span(line_iter, line_iter + n_lines));
 }
 
-static int md_setup_fenced_code_detail(MD_CTX &ctx, const MD_BLOCK *block,
+static int md_setup_fenced_code_detail(Parsing_Context &ctx, const Block *block,
                                        code_Detail *det,
                                        MD_ATTRIBUTE_BUILD *info_build,
                                        MD_ATTRIBUTE_BUILD *lang_build) {
@@ -4801,7 +4799,7 @@ abort:
   return ret;
 }
 
-static int md_process_leaf_block(MD_CTX &ctx, const MD_BLOCK *block) {
+static int md_process_leaf_block(Parsing_Context &ctx, const Block *block) {
   std::variant<h_Detail, code_Detail, table_Detail> det{};
   MD_ATTRIBUTE_BUILD info_build;
   MD_ATTRIBUTE_BUILD lang_build;
@@ -4864,7 +4862,8 @@ static int md_process_leaf_block(MD_CTX &ctx, const MD_BLOCK *block) {
 
   case BlockType::raw_html:
     MD_CHECK(md_process_verbatim_block_contents(
-        ctx, TextType::raw_html, std::span((MD_VERBATIMLINE *)(block + 1), block->n_lines)));
+        ctx, TextType::raw_html,
+        std::span((MD_VERBATIMLINE *)(block + 1), block->n_lines)));
     break;
 
   case BlockType::table:
@@ -4898,7 +4897,7 @@ abort:
   return ret;
 }
 
-static int md_process_all_blocks(MD_CTX &ctx) {
+static int md_process_all_blocks(Parsing_Context &ctx) {
   int byte_off = 0;
   int ret = 0;
 
@@ -4909,7 +4908,7 @@ static int md_process_all_blocks(MD_CTX &ctx) {
   ctx.n_containers = 0;
 
   while (byte_off < ctx.n_block_bytes) {
-    MD_BLOCK *block = (MD_BLOCK *)((char *)ctx.block_bytes + byte_off);
+    Block *block = (Block *)((char *)ctx.block_bytes + byte_off);
     union {
       ul_Detail ul;
       ol_Detail ol;
@@ -4973,7 +4972,7 @@ static int md_process_all_blocks(MD_CTX &ctx) {
         byte_off += block->n_lines * sizeof(Line);
     }
 
-    byte_off += sizeof(MD_BLOCK);
+    byte_off += sizeof(Block);
   }
 
   ctx.n_block_bytes = 0;
@@ -4986,7 +4985,7 @@ abort:
  ***  Grouping Lines into Blocks  ***
  ************************************/
 
-static void *md_push_block_bytes(MD_CTX &ctx, int n_bytes) {
+static void *md_push_block_bytes(Parsing_Context &ctx, int n_bytes) {
   void *ptr;
 
   if (ctx.n_block_bytes + n_bytes > ctx.alloc_block_bytes) {
@@ -5007,7 +5006,7 @@ static void *md_push_block_bytes(MD_CTX &ctx, int n_bytes) {
       OFF off_current_block =
           (OFF)((char *)ctx.current_block - (char *)ctx.block_bytes);
       ctx.current_block =
-          (MD_BLOCK *)((char *)new_block_bytes + off_current_block);
+          (Block *)((char *)new_block_bytes + off_current_block);
     }
 
     ctx.block_bytes = new_block_bytes;
@@ -5018,12 +5017,12 @@ static void *md_push_block_bytes(MD_CTX &ctx, int n_bytes) {
   return ptr;
 }
 
-static int md_start_new_block(MD_CTX &ctx, const MD_LINE_ANALYSIS *line) {
-  MD_BLOCK *block;
+static int md_start_new_block(Parsing_Context &ctx, const MD_LINE_ANALYSIS *line) {
+  Block *block;
 
   MD_ASSERT(ctx.current_block == nullptr);
 
-  block = (MD_BLOCK *)md_push_block_bytes(ctx, sizeof(MD_BLOCK));
+  block = (Block *)md_push_block_bytes(ctx, sizeof(Block));
   if (block == nullptr)
     return -1;
 
@@ -5072,7 +5071,7 @@ static int md_start_new_block(MD_CTX &ctx, const MD_LINE_ANALYSIS *line) {
  * (Reference definitions can only be at start of it as they cannot break
  * a paragraph.)
  */
-static int md_consume_link_reference_definitions(MD_CTX &ctx) {
+static int md_consume_link_reference_definitions(Parsing_Context &ctx) {
   /* XXX: WTF? current_block's type is MD_BLOCK*, which when deferenced,
   contains the following memebers, with sizeof(MD_BLOCK)==8:
   BlockType type : 8;
@@ -5111,7 +5110,7 @@ static int md_consume_link_reference_definitions(MD_CTX &ctx) {
     if (n == lines.size()) {
       /* Remove complete block. */
       ctx.n_block_bytes -= n * sizeof(Line);
-      ctx.n_block_bytes -= sizeof(MD_BLOCK);
+      ctx.n_block_bytes -= sizeof(Block);
       ctx.current_block = nullptr;
     } else {
       /* Remove just some initial lines from the block. */
@@ -5125,7 +5124,7 @@ static int md_consume_link_reference_definitions(MD_CTX &ctx) {
   return 0;
 }
 
-static int md_end_current_block(MD_CTX &ctx) {
+static int md_end_current_block(Parsing_Context &ctx) {
   int ret = 0;
 
   if (ctx.current_block == nullptr)
@@ -5168,7 +5167,7 @@ abort:
   return ret;
 }
 
-static int md_add_line_into_current_block(MD_CTX &ctx,
+static int md_add_line_into_current_block(Parsing_Context &ctx,
                                           const MD_LINE_ANALYSIS *analysis) {
   MD_ASSERT(ctx.current_block != nullptr);
 
@@ -5198,15 +5197,15 @@ static int md_add_line_into_current_block(MD_CTX &ctx,
   return 0;
 }
 
-static int md_push_container_bytes(MD_CTX &ctx, MD_BLOCKTYPE type,
+static int md_push_container_bytes(Parsing_Context &ctx, MD_BLOCKTYPE type,
                                    unsigned start, unsigned data,
                                    unsigned flags) {
-  MD_BLOCK *block;
+  Block *block;
   int ret = 0;
 
   MD_CHECK(md_end_current_block(ctx));
 
-  block = (MD_BLOCK *)md_push_block_bytes(ctx, sizeof(MD_BLOCK));
+  block = (Block *)md_push_block_bytes(ctx, sizeof(Block));
   if (block == nullptr)
     return -1;
 
@@ -5223,7 +5222,7 @@ abort:
  ***  Line Analysis  ***
  ***********************/
 
-static int md_is_hr_line(MD_CTX &ctx, OFF beg, OFF *p_end, OFF *p_killer) {
+static int md_is_hr_line(Parsing_Context &ctx, OFF beg, OFF *p_end, OFF *p_killer) {
   OFF off = beg + 1;
   int n = 1;
 
@@ -5249,7 +5248,7 @@ static int md_is_hr_line(MD_CTX &ctx, OFF beg, OFF *p_end, OFF *p_killer) {
   return true;
 }
 
-static int md_is_atxheader_line(MD_CTX &ctx, OFF beg, OFF *p_beg, OFF *p_end,
+static int md_is_atxheader_line(Parsing_Context &ctx, OFF beg, OFF *p_beg, OFF *p_end,
                                 unsigned *p_level) {
   int n;
   OFF off = beg + 1;
@@ -5273,7 +5272,7 @@ static int md_is_atxheader_line(MD_CTX &ctx, OFF beg, OFF *p_beg, OFF *p_end,
   return true;
 }
 
-static bool md_is_setext_underline(MD_CTX &ctx, OFF beg, OFF *p_end,
+static bool md_is_setext_underline(Parsing_Context &ctx, OFF beg, OFF *p_end,
                                    unsigned *p_level) {
   OFF off = beg + 1;
 
@@ -5293,7 +5292,7 @@ static bool md_is_setext_underline(MD_CTX &ctx, OFF beg, OFF *p_end,
   return true;
 }
 
-static bool md_is_table_underline(MD_CTX &ctx, OFF beg, OFF *p_end,
+static bool md_is_table_underline(Parsing_Context &ctx, OFF beg, OFF *p_end,
                                   unsigned *p_col_count) {
   OFF off = beg;
   int found_pipe = false;
@@ -5350,7 +5349,7 @@ static bool md_is_table_underline(MD_CTX &ctx, OFF beg, OFF *p_end,
   return true;
 }
 
-static bool md_is_opening_code_fence(MD_CTX &ctx, OFF beg, OFF *p_end) {
+static bool md_is_opening_code_fence(Parsing_Context &ctx, OFF beg, OFF *p_end) {
   OFF off = beg;
 
   while (off < ctx.size && CH(off) == CH(beg))
@@ -5378,7 +5377,7 @@ static bool md_is_opening_code_fence(MD_CTX &ctx, OFF beg, OFF *p_end) {
   return true;
 }
 
-static bool md_is_closing_code_fence(MD_CTX &ctx, CHAR ch, OFF beg,
+static bool md_is_closing_code_fence(Parsing_Context &ctx, CHAR ch, OFF beg,
                                      OFF *p_end) {
   OFF off = beg;
   int ret = false;
@@ -5410,7 +5409,7 @@ out:
 /* Returns type of the raw HTML block, or false if it is not HTML block.
  * (Refer to CommonMark specification for details about the types.)
  */
-static unsigned short md_is_html_block_start_condition(MD_CTX &ctx, OFF beg) {
+static unsigned short md_is_html_block_start_condition(Parsing_Context &ctx, OFF beg) {
   typedef struct TAG_tag TAG;
   struct TAG_tag {
     const CHAR *name;
@@ -5539,7 +5538,7 @@ static unsigned short md_is_html_block_start_condition(MD_CTX &ctx, OFF beg) {
 
 /* Case sensitive check whether there is a substring 'what' between 'beg'
  * and end of line. */
-static int md_line_contains(MD_CTX &ctx, OFF beg, const CHAR *what, SZ what_len,
+static int md_line_contains(Parsing_Context &ctx, OFF beg, const CHAR *what, SZ what_len,
                             OFF *p_end) {
   OFF i;
   for (i = beg; i + what_len < ctx.size; i++) {
@@ -5560,7 +5559,7 @@ static int md_line_contains(MD_CTX &ctx, OFF beg, const CHAR *what, SZ what_len,
  * Note it fills p_end even when it is not end condition as the caller
  * does not need to analyze contents of a raw HTML block.
  */
-static int md_is_html_block_end_condition(MD_CTX &ctx, OFF beg, OFF *p_end) {
+static int md_is_html_block_end_condition(Parsing_Context &ctx, OFF beg, OFF *p_end) {
   switch (ctx.html_block_type) {
   case 1: {
     OFF off = beg;
@@ -5612,8 +5611,8 @@ static int md_is_html_block_end_condition(MD_CTX &ctx, OFF beg, OFF *p_end) {
   return false;
 }
 
-static bool md_is_container_compatible(const MD_CONTAINER &pivot,
-                                       const MD_CONTAINER &container) {
+static bool md_is_container_compatible(const Container &pivot,
+                                       const Container &container) {
   /* Block quote has no "items" like lists. */
   if (container.ch == _T('>'))
     return false;
@@ -5626,16 +5625,16 @@ static bool md_is_container_compatible(const MD_CONTAINER &pivot,
   return true;
 }
 
-static int md_push_container(MD_CTX &ctx, const MD_CONTAINER *container) {
+static int md_push_container(Parsing_Context &ctx, const Container *container) {
   if (ctx.n_containers >= ctx.alloc_containers) {
-    MD_CONTAINER *new_containers;
+    Container *new_containers;
 
     ctx.alloc_containers =
         (ctx.alloc_containers > 0
              ? ctx.alloc_containers + ctx.alloc_containers / 2
              : 16);
-    new_containers = (MD_CONTAINER *)realloc(
-        ctx.containers, ctx.alloc_containers * sizeof(MD_CONTAINER));
+    new_containers = (Container *)realloc(
+        ctx.containers, ctx.alloc_containers * sizeof(Container));
     if (new_containers == nullptr) {
       MD_LOG("realloc() failed.");
       return -1;
@@ -5644,16 +5643,16 @@ static int md_push_container(MD_CTX &ctx, const MD_CONTAINER *container) {
     ctx.containers = new_containers;
   }
 
-  memcpy(&ctx.containers[ctx.n_containers++], container, sizeof(MD_CONTAINER));
+  memcpy(&ctx.containers[ctx.n_containers++], container, sizeof(Container));
   return 0;
 }
 
-static int md_enter_child_containers(MD_CTX &ctx, int n_children) {
+static int md_enter_child_containers(Parsing_Context &ctx, int n_children) {
   int i;
   int ret = 0;
 
   for (i = ctx.n_containers - n_children; i < ctx.n_containers; i++) {
-    MD_CONTAINER *c = &ctx.containers[i];
+    Container *c = &ctx.containers[i];
     int is_ordered_list = false;
 
     switch (c->ch) {
@@ -5693,11 +5692,11 @@ abort:
   return ret;
 }
 
-static int md_leave_child_containers(MD_CTX &ctx, int n_keep) {
+static int md_leave_child_containers(Parsing_Context &ctx, int n_keep) {
   int ret = 0;
 
   while (ctx.n_containers > n_keep) {
-    const MD_CONTAINER &c{ctx.containers[ctx.n_containers - 1]};
+    const Container &c{ctx.containers[ctx.n_containers - 1]};
     int is_ordered_list = false;
 
     switch (c.ch) {
@@ -5734,8 +5733,8 @@ abort:
   return ret;
 }
 
-static int md_is_container_mark(MD_CTX &ctx, unsigned indent, OFF beg,
-                                OFF *p_end, MD_CONTAINER *p_container) {
+static int md_is_container_mark(Parsing_Context &ctx, unsigned indent, OFF beg,
+                                OFF *p_end, Container *p_container) {
   OFF off = beg;
   OFF max_end;
 
@@ -5789,7 +5788,7 @@ static int md_is_container_mark(MD_CTX &ctx, unsigned indent, OFF beg,
   return false;
 }
 
-static unsigned md_line_indentation(MD_CTX &ctx, unsigned total_indent, OFF beg,
+static unsigned md_line_indentation(Parsing_Context &ctx, unsigned total_indent, OFF beg,
                                     OFF *p_end) {
   OFF off = beg;
   unsigned indent = total_indent;
@@ -5811,14 +5810,14 @@ static const MD_LINE_ANALYSIS md_dummy_blank_line = {LineType::blank, 0, 0, 0,
 
 /* Analyze type of the line and find some its properties. This serves as a
  * main input for determining type and boundaries of a block. */
-static int md_analyze_line(MD_CTX &ctx, OFF beg, OFF *p_end,
+static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
                            const MD_LINE_ANALYSIS *pivot_line,
                            MD_LINE_ANALYSIS *line) {
   unsigned total_indent = 0;
   int n_parents = 0;
   int n_brothers = 0;
   int n_children = 0;
-  MD_CONTAINER container{};
+  Container container{};
   int prev_line_has_list_loosening_effect =
       ctx.last_line_has_list_loosening_effect;
   OFF off = beg;
@@ -5832,7 +5831,7 @@ static int md_analyze_line(MD_CTX &ctx, OFF beg, OFF *p_end,
   /* Given the indentation and block quote marks '>', determine how many of
    * the current containers are our parents. */
   while (n_parents < ctx.n_containers) {
-    MD_CONTAINER *c = &ctx.containers[n_parents];
+    Container *c = &ctx.containers[n_parents];
 
     if (c->ch == _T('>') && line->indent < ctx.code_indent_offset &&
         off < ctx.size && CH(off) == _T('>')) {
@@ -5955,10 +5954,10 @@ static int md_analyze_line(MD_CTX &ctx, OFF beg, OFF *p_end,
          */
         if (n_parents > 0 && ctx.containers[n_parents - 1].ch != _T('>') &&
             n_brothers + n_children == 0 && ctx.current_block == nullptr &&
-            ctx.n_block_bytes > (int)sizeof(MD_BLOCK)) {
-          MD_BLOCK *top_block =
-              (MD_BLOCK *)((char *)ctx.block_bytes + ctx.n_block_bytes -
-                           sizeof(MD_BLOCK));
+            ctx.n_block_bytes > (int)sizeof(Block)) {
+          Block *top_block =
+              (Block *)((char *)ctx.block_bytes + ctx.n_block_bytes -
+                           sizeof(Block));
           if (top_block->type == BlockType::li)
             ctx.last_list_item_starts_with_two_blank_lines = true;
         }
@@ -5975,10 +5974,10 @@ static int md_analyze_line(MD_CTX &ctx, OFF beg, OFF *p_end,
       if (ctx.last_list_item_starts_with_two_blank_lines) {
         if (n_parents > 0 && ctx.containers[n_parents - 1].ch != _T('>') &&
             n_brothers + n_children == 0 && ctx.current_block == nullptr &&
-            ctx.n_block_bytes > (int)sizeof(MD_BLOCK)) {
-          MD_BLOCK *top_block =
-              (MD_BLOCK *)((char *)ctx.block_bytes + ctx.n_block_bytes -
-                           sizeof(MD_BLOCK));
+            ctx.n_block_bytes > (int)sizeof(Block)) {
+          Block *top_block =
+              (Block *)((char *)ctx.block_bytes + ctx.n_block_bytes -
+                           sizeof(Block));
           if (top_block->type == BlockType::li)
             n_parents--;
         }
@@ -6188,7 +6187,7 @@ static int md_analyze_line(MD_CTX &ctx, OFF beg, OFF *p_end,
       if (tmp + 2 < ctx.size && CH(tmp) == _T('[') &&
           ISANYOF(tmp + 1, _T("xX ")) && CH(tmp + 2) == _T(']') &&
           (tmp + 3 == ctx.size || ISBLANK(tmp + 3) || ISNEWLINE(tmp + 3))) {
-        MD_CONTAINER *task_container =
+        Container *task_container =
             (n_children > 0 ? &ctx.containers[ctx.n_containers - 1]
                             : &container);
         task_container->is_task = true;
@@ -6266,10 +6265,10 @@ static int md_analyze_line(MD_CTX &ctx, OFF beg, OFF *p_end,
   /* If we belong to a list after seeing a blank line, the list is loose. */
   if (prev_line_has_list_loosening_effect && line->type != LineType::blank &&
       n_parents + n_brothers > 0) {
-    MD_CONTAINER *c = &ctx.containers[n_parents + n_brothers - 1];
+    Container *c = &ctx.containers[n_parents + n_brothers - 1];
     if (c->ch != _T('>')) {
-      MD_BLOCK *block =
-          (MD_BLOCK *)(((char *)ctx.block_bytes) + c->block_byte_off);
+      Block *block =
+          (Block *)(((char *)ctx.block_bytes) + c->block_byte_off);
       block->flags |= MD_BLOCK_LOOSE_LIST;
     }
   }
@@ -6302,7 +6301,7 @@ abort:
   return ret;
 }
 
-static int md_process_line(MD_CTX &ctx, const MD_LINE_ANALYSIS **p_pivot_line,
+static int md_process_line(Parsing_Context &ctx, const MD_LINE_ANALYSIS **p_pivot_line,
                            MD_LINE_ANALYSIS *line) {
   const MD_LINE_ANALYSIS *pivot_line = *p_pivot_line;
   int ret = 0;
@@ -6376,7 +6375,7 @@ abort:
   return ret;
 }
 
-static int md_process_doc(MD_CTX &ctx) {
+static int md_process_doc(Parsing_Context &ctx) {
   const MD_LINE_ANALYSIS *pivot_line = &md_dummy_blank_line;
   MD_LINE_ANALYSIS line_buf[2];
   MD_LINE_ANALYSIS *line = &line_buf[0];
@@ -6439,7 +6438,7 @@ int md_parse(mdstringview text, const MD_PARSER &parser, void *userdata) {
 
 int md_parse(const MD_CHAR *text, MD_SIZE size, const MD_PARSER *parser,
              void *userdata) {
-  MD_CTX ctx;
+  Parsing_Context ctx;
   int i;
   int ret;
 
@@ -6450,13 +6449,13 @@ int md_parse(const MD_CHAR *text, MD_SIZE size, const MD_PARSER *parser,
   }
 
   /* Setup context structure. */
-  memset(&ctx, 0, sizeof(MD_CTX));
+  memset(&ctx, 0, sizeof(Parsing_Context));
   ctx.text = text;
   ctx.size = size;
   memcpy(&ctx.parser, parser, sizeof(MD_PARSER));
   ctx.userdata = userdata;
   ctx.code_indent_offset =
-      (ctx.parser.flags & MD_FLAG_NOINDENTEDCODEBLOCKS) ? (OFF)(-1) : 4;
+      (ctx.parser.flags & MD_FLAG_NOINDENTEDCODEBLOCKS) ? -1 : 4;
   md_build_mark_char_map(ctx);
   ctx.doc_ends_with_newline = (size > 0 && ISNEWLINE_(text[size - 1]));
 

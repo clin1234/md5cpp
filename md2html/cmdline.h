@@ -28,11 +28,11 @@
 
 /* The option may have an argument. (Affects only long option.) */
 #include <array>
-#define CMDLINE_OPTFLAG_OPTIONALARG     0x0001
+#define CMDLINE_OPTFLAG_OPTIONALARG 0x0001
 
 /* The option must have an argument.
  * Such short option cannot be grouped within single '-abc'. */
-#define CMDLINE_OPTFLAG_REQUIREDARG     0x0002
+#define CMDLINE_OPTFLAG_REQUIREDARG 0x0002
 
 /* Enable special compiler-like mode for the long option.
  *
@@ -59,28 +59,30 @@
  *    For example:
  *      -DDEBUG=0               (-D is the option, DEBUG=0 is the argument).
  *      -Isrc/include           (-I is the option, src/include is the argument).
- *      -isystem /usr/include   (-isystem is the option, /usr/include is the argument).
- *      -lmath                  (-l is the option, math is the argument).
+ *      -isystem /usr/include   (-isystem is the option, /usr/include is the
+ * argument). -lmath                  (-l is the option, math is the argument).
  */
-#define CMDLINE_OPTFLAG_COMPILERLIKE    0x0004
-
+#define CMDLINE_OPTFLAG_COMPILERLIKE 0x0004
 
 /* Special (reserved) option IDs. Do not use these for any CMDLINE_OPTION::id.
  * See documentation of cmdline_read() to get info about their meaning.
  */
-#define CMDLINE_OPTID_NONE              0
-#define CMDLINE_OPTID_UNKNOWN           (-0x7fffffff + 0)
-#define CMDLINE_OPTID_MISSINGARG        (-0x7fffffff + 1)
-#define CMDLINE_OPTID_BOGUSARG          (-0x7fffffff + 2)
+#define CMDLINE_OPTID_NONE 0
+#define CMDLINE_OPTID_UNKNOWN (-0x7fffffff + 0)
+#define CMDLINE_OPTID_MISSINGARG (-0x7fffffff + 1)
+#define CMDLINE_OPTID_BOGUSARG (-0x7fffffff + 2)
 
 struct _CMDLINE_OPTION {
-    char shortname;         /* Short (single char) option or 0. */
-    const char* longname;   /* Long name (after "--") or NULL. */
-    int id;                 /* Non-zero ID to identify the option in the callback; or zero to denote end of options list. */
-    unsigned flags;         /* Bitmask of CMDLINE_OPTFLAG_xxxx flags. */
+  char shortname;       /* Short (single char) option or 0. */
+  const char *longname; /* Long name (after "--") or NULL. */
+  int id; /* Non-zero ID to identify the option in the callback; or zero to
+             denote end of options list. */
+  unsigned flags; /* Bitmask of CMDLINE_OPTFLAG_xxxx flags. */
 };
-using CMDLINE_OPTION = _CMDLINE_OPTION;
+using Opt = _CMDLINE_OPTION;
 
+
+using callback = int (*)(int /*id*/, const char * /*arg*/, void * /*userdata*/);
 /* Parses all options and their arguments as specified by argc, argv accordingly
  * with the given options (except argv[0] which is ignored).
  *
@@ -135,10 +137,7 @@ using CMDLINE_OPTION = _CMDLINE_OPTION;
  * If the callback returns a non-zero, cmdline_read() aborts immediately and
  * cmdline_read() propagates the same return value to the caller.
  */
-// using callback = int(tmp)(int, const char*, void*);
+int cmdline_read(const auto &options, int argc, char **argv, callback,
+                 void *userdata);
 
-int cmdline_read(const std::array<CMDLINE_OPTION, 26>& options, int argc, char** argv,
-        int (*callback)(int /*id*/, const char* /*arg*/, void* /*userdata*/),
-        void* userdata);
-
-#endif  /* CRE_CMDLINE_H */
+#endif /* CRE_CMDLINE_H */

@@ -26,20 +26,26 @@
 #ifndef MD4C_ENTITY_H
 #define MD4C_ENTITY_H
 
+#ifdef __cplusplus
 #include <array>
 #include <optional>
 #include <string_view>
+#endif
 
 struct entity {
   const char *name;
   unsigned codepoints[2];
 };
 
+#ifdef __cplusplus
 /* Returns `std::optional<struct entity>`, where `operator bool()` can be used
 to determine if `name` matches an entity, and .value() if it exists. */
 constexpr std::optional<entity> lookup(std::string_view);
 
 extern "C" {
+#endif // __cplusplus
 const struct entity *entity_lookup(const char *name, size_t name_size);
+#ifdef __cplusplus
 }
+#endif // __cplusplus
 #endif /* MD4C_ENTITY_H */
