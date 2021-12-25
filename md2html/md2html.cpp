@@ -199,7 +199,7 @@ static int process_file(std::ifstream &in, std::ofstream &out) {
   return ret;
 }
 
-static constexpr std::array cmdline_options{
+static constexpr const std::array cmdline_options{
     Opt{'o', "output", 'o', CMDLINE_OPTFLAG_REQUIREDARG},
     Opt{'f', "full-html", 'f', 0},
     Opt{'x', "xhtml", 'x', 0},

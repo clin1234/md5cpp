@@ -26,8 +26,9 @@
 #ifndef CRE_CMDLINE_H
 #define CRE_CMDLINE_H
 
-/* The option may have an argument. (Affects only long option.) */
 #include <array>
+
+/* The option may have an argument. (Affects only long option.) */
 #define CMDLINE_OPTFLAG_OPTIONALARG 0x0001
 
 /* The option must have an argument.
@@ -137,7 +138,7 @@ using callback = int (*)(int /*id*/, const char * /*arg*/, void * /*userdata*/);
  * If the callback returns a non-zero, cmdline_read() aborts immediately and
  * cmdline_read() propagates the same return value to the caller.
  */
-int cmdline_read(const auto &options, int argc, char **argv, callback,
+int cmdline_read(const std::array<Opt, 31> &options, int argc, char **argv, callback,
                  void *userdata);
 
 #endif /* CRE_CMDLINE_H */

@@ -67,14 +67,13 @@ static int cmdline_handle_short_opt_group(const auto &options,
   return ret;
 }
 
-int cmdline_read(const auto &options, int argc, char **argv, callback callback,
+int cmdline_read(const std::array<Opt, 31>& options, int argc, char **argv, callback callback,
                  void *userdata) {
   char auxbuf[CMDLINE_AUXBUF_SIZE + 1];
   int fast_optarg_decision = 1;
   int after_doubledash = 0;
   int i = 1;
   int ret = 0;
-  decltype(options) l;
 
   auxbuf[CMDLINE_AUXBUF_SIZE] = '\0';
 
