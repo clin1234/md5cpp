@@ -36,7 +36,7 @@
 #define MD_HTML_FLAG_SKIP_UTF8_BOM          0x0004
 #define MD_HTML_FLAG_XHTML                  0x0008
 
-//using md_string_span = std::basic_string_view<MD_CHAR>;
+using mdstringview = std::basic_string_view<MD_CHAR>;
 
 /* Render Markdown into HTML.
  *
@@ -60,8 +60,8 @@ int md_html(const MD_CHAR* input, MD_SIZE input_size,
             void* userdata, unsigned parser_flags, unsigned renderer_flags);
 }
 
-int md_html(const std::u8string_view& input,
-            void (*process_output)(const std::u8string_view&, void*),
+int to_html(mdstringview input,
+            void (*process_output)(mdstringview, void*),
             void* userdata, unsigned parser_flags, unsigned renderer_flags);
 
 #endif  /* MD4C_HTML_H */

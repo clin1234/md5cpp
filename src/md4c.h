@@ -28,6 +28,7 @@
 
 #ifdef __cplusplus
 #include <string>
+#include <vector>
 #include <string_view>
 #endif
 
@@ -51,7 +52,7 @@ using mdstringview = std::basic_string_view<MD_CHAR>;
 #endif
 
 typedef unsigned MD_SIZE;
-typedef unsigned MD_OFFSET;
+typedef size_t MD_OFFSET;
 
 /* Block represents a part of document hierarchy structure like a paragraph
  * or list item.
@@ -239,10 +240,9 @@ using Align = MD_ALIGN;
  *     changes.
  */
 struct _MD_ATTRIBUTE {
-  const MD_CHAR *text;
-  MD_SIZE size;
-  const TextType *substr_types;
-  const MD_OFFSET *substr_offsets;
+  mdstring text;
+  std::vector<TextType> substr_types;
+  std::vector<MD_OFFSET> substr_offsets;
 };
 using Attribute = _MD_ATTRIBUTE;
 
@@ -384,6 +384,55 @@ as having green and red backgrounds, respectively.  */
 #define MD_DIALECT_GITLAB                                                      \
   MD_DIALECT_GITHUB | MD_FLAG_INLINE_DIFF | MD_FLAG_COLOR
 
+enum class Extensions : unsigned long {
+  // Strictly CommonMark-compliant, no extensions
+  None = 0,
+  /* In MD_TEXT_NORMAL, collapse non-trivial whitespace into single ' ' */
+  Collapse_Whitespace = 1 << 0,
+  /* Do not require space in ATX headers ( ###header ) */
+  No_Space_Needed_for_ATXHeaders = 1 << 1,
+  /* Recognize URLs as autolinks even without '<', '>' */
+  Permissive_Autolink = 1 << 2,
+  /* Recognize e-mails as autolinks even without '<', '>' and 'mailto:' */
+  Permissive_Email_Autolink = 1 << 3,
+  /* Disable indented code blocks. (Only fenced code works.) */
+  No_Indented_Codeblock = 1 << 4,
+  /* Disable raw HTML blocks. */
+  No_Raw_HTML_Block = 1 << 5,
+  /* Disable raw HTML (inline). */
+  No_Raw_HTML_Inline = 1 << 6,
+  /* Enable tables extension. */
+  Tables = 1 << 7,
+  /* Enable strikethrough extension. */
+  Strikethrough = 1 << 8,
+  /* Enable WWW autolinks (even without any scheme prefix, if they begin with 'www.') */
+  Permissive_WWW_Autolink = 1 << 9,
+  /* Enable task list extension. */
+  Tasklist = 1 << 10,
+  /* Enable $ and $$ containing LaTeX equations. */
+  LaTeX_Math = 1 << 11,
+  /* Enable wiki links extension. */
+  Wikilinks = 1 << 12,
+  /* Enable underline extension (and disables '_' for normal emphasis).  */
+  Underline = 1 << 13,
+  /* Allow abbreviations using Markdown Extra's syntax
+   * Example: [HTML]: Hyper Text Markup Language ->
+   * <abbr title="Hyper Text Markup Language">HTML</abbr> */
+  Abbreviation = 1 << 14,
+  /* Display Git-style additions and deletions in inline text as
+                  having green and red backgrounds, respectively.  */
+  Inline_Diff = 1 << 15,
+  /* Render RGB and HSL values in HTML output */
+  Color = 1 << 16,
+  /* Generate table of contents from headings */
+  Table_of_Contents = 1 << 17
+};
+
+inline Extensions operator|(Extensions lhs, Extensions rhs) {
+  using T = std::underlying_type_t<Extensions>;
+  return static_cast<Extensions>(static_cast<T>(lhs) | static_cast<T>(rhs));
+}
+
 /* Parser structure.
  */
 struct _MD_PARSER {
@@ -427,7 +476,7 @@ struct _MD_PARSER {
    * it is not intended to provide any errors suitable for displaying to an
    * end user.
    */
-  void (*debug_log)(const char * /*msg*/, void * /*userdata*/);
+  void (*debug_log)(mdstringview /*msg*/, void * /*userdata*/);
 
   /* Reserved. Set to NULL.
    */

@@ -23,12 +23,7 @@
  * IN THE SOFTWARE.
  */
 
-#include <ios>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <string>
-#include <time.h>
 
 #include "cmdline.h"
 #include "md4c-html.h"
@@ -67,16 +62,15 @@ static bool want_stat;
  * of MD4C (--stat option). This allows us to measure just time of the parser,
  * without the I/O.
  */
+std::string bof{};
 
+/*
 struct membuffer {
   char *data;
   size_t asize;
   size_t size;
 };
 
-std::string bof{};
-
-/*
 static void
 membuf_init(struct membuffer* buf, MD_SIZE new_asize)
 {
@@ -121,7 +115,7 @@ membuf_append(struct membuffer* buf, const char* data, MD_SIZE size)
  ***  Main program  ***
  **********************/
 
-static void process_output(const MD_CHAR *text, MD_SIZE size, void *userdata) {
+static void process_output(mdstringview text, void *userdata) {
   bof += text;
   // TODO: band-aid to compile
   // membuf_append((struct membuffer *)userdata, text, size);
@@ -143,17 +137,17 @@ static int process_file(std::ifstream &in, std::ofstream &out) {
    * deal with the HTML header/footer and tags. */
   out_buf.resize(in_buf.size() + in_buf.size() / 8 + 64);
 
-  /* Parse the document. This shall call our callbacks provided via the
-   * md_renderer_t structure. */
   auto t0 = std::chrono::steady_clock::now();
 
-  ret = md_html(in_buf.c_str(), in_buf.size(), process_output, &out_buf,
+  /* Parse the document. This shall call our callbacks provided via the
+   * md_renderer_t structure. */
+  ret = to_html(in_buf, process_output, &out_buf,
                 parser_flags, renderer_flags);
 
   auto t1 = std::chrono::steady_clock::now();
   if (ret != 0) {
     fprintf(stderr, "Parsing failed.\n");
-    // goto out;
+    return ret;
   }
 
   /* Write down the document in the HTML format. */
@@ -301,7 +295,8 @@ static void version(void) { std::cout << MD_VERSION << '\n'; }
 static const char *input_path = NULL;
 static const char *output_path = NULL;
 
-static int cmdline_callback(int opt, char const *value, void *data) {
+static int cmdline_callback(int opt, char const *value,
+                            [[maybe_unused]] void *data) {
   switch (opt) {
   case 0:
     if (input_path) {

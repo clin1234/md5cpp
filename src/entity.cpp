@@ -2164,7 +2164,7 @@ static constexpr std::array<entity, 2131> entity_table{
     }
 };
 
-constexpr std::optional<entity> lookup(std::string_view name) {
+constexpr const std::optional<entity> lookup(std::string_view name) {
   const auto &pred = [&name](const struct entity &e) { return name == e.name; };
   std::optional<entity> return_val{};
   const auto tmp{std::ranges::find_if(entity_table, pred)};
@@ -2175,7 +2175,7 @@ constexpr std::optional<entity> lookup(std::string_view name) {
 
 extern "C" {
 const struct entity *entity_lookup(const char *name, size_t name_size) {
-  const auto&& ret{lookup(name)};
-  return ret ? &*ret : nullptr;
+  const auto ret{lookup(std::string_view(name,name_size))};
+  return ret ? &(ret.value()) : nullptr;
 }
 }
