@@ -228,15 +228,15 @@ struct Parsing_Context {
 enum class LineType {
   blank,
   hr,
-  MD_LINE_ATXHEADER,
-  MD_LINE_SETEXTHEADER,
-  MD_LINE_SETEXTUNDERLINE,
-  MD_LINE_INDENTEDCODE,
-  MD_LINE_FENCEDCODE,
+  ATX_header,
+  set_ext_header,
+  set_ext_underline,
+  indented_code,
+  fenced_code,
   raw_html,
-  MD_LINE_TEXT,
-  MD_LINE_TABLE,
-  MD_LINE_TABLEUNDERLINE
+  text,
+  table,
+  table_underline
 };
 
 struct Line_Analysis {
@@ -732,20 +732,18 @@ static void md_get_unicode_fold_info(unsigned codepoint,
   }
 
   /* Try to locate the codepoint in any of the maps. */
-  for (const auto &fold_map : FOLD_MAP_LIST) {
-    int index = md_unicode_bsearch__(codepoint, std::span(fold_map.map));
+  for (const auto &[map, data, n_codepoints] : FOLD_MAP_LIST) {
+    int index = md_unicode_bsearch__(codepoint, map);
     if (index >= 0) {
       /* Found the mapping. */
-      unsigned n_codepoints = fold_map.n_codepoints;
-      const auto map{fold_map.map};
-      const auto codepoints{fold_map.data.first(index * n_codepoints)};
+      const auto codepoints{data.first(index * n_codepoints)};
       info->codepoints.assign(codepoints.begin(), codepoints.end());
       // Maybe not needed?
       // info->codepoints.resize(n_codepoints);
 
       // memcpy(info->codepoints, codepoints, sizeof(unsigned) * n_codepoints);
 
-      if (fold_map.map[index] != codepoint) {
+      if (map[index] != codepoint) {
         /* The found mapping maps whole range of codepoints,
          * i.e. we have to offset info->codepoints[0] accordingly. */
         if ((map[index] & 0x00ffffff) + 1 == codepoints[0]) {
@@ -2719,27 +2717,28 @@ static void md_build_mark_char_map(Parsing_Context &ctx) {
   ctx.mark_char_map['!'] = 1;
   ctx.mark_char_map[']'] = 1;
   ctx.mark_char_map['\0'] = 1;
+  using enum Extensions;
 
-  if (ctx.parser.flags & MD_FLAG_STRIKETHROUGH)
+  if (ctx.parser.flags.contains(Strikethrough))
     ctx.mark_char_map['~'] = 1;
 
-  if (ctx.parser.flags & MD_FLAG_LATEXMATHSPANS)
+  if (ctx.parser.flags.contains(LaTeX_Math))
     ctx.mark_char_map['$'] = 1;
 
-  if (ctx.parser.flags & MD_FLAG_PERMISSIVEEMAILAUTOLINKS)
+  if (ctx.parser.flags.contains(Permissive_Email_Autolink))
     ctx.mark_char_map['@'] = 1;
 
-  if (ctx.parser.flags & MD_FLAG_PERMISSIVEURLAUTOLINKS)
+  if (ctx.parser.flags.contains(Permissive_Autolink))
     ctx.mark_char_map[':'] = 1;
 
-  if (ctx.parser.flags & MD_FLAG_PERMISSIVEWWWAUTOLINKS)
+  if (ctx.parser.flags.contains(Permissive_WWW_Autolink))
     ctx.mark_char_map['.'] = 1;
 
-  if ((ctx.parser.flags & MD_FLAG_TABLES) ||
-      (ctx.parser.flags & MD_FLAG_WIKILINKS))
+  if ((ctx.parser.flags.contains(Tables)) ||
+      (ctx.parser.flags.contains(Wikilinks)))
     ctx.mark_char_map['|'] = 1;
 
-  if (ctx.parser.flags & MD_FLAG_COLLAPSEWHITESPACE)
+  if (ctx.parser.flags.contains(Collapse_Whitespace))
     for (unsigned i = 0; i < sizeof(ctx.mark_char_map); i++)
       if (ISWHITESPACE_(i))
         ctx.mark_char_map[i] = 1;
@@ -2748,7 +2747,7 @@ static void md_build_mark_char_map(Parsing_Context &ctx) {
 /* We limit code span marks to lower than 32 backticks. This solves the
  * pathologic case of too many openers, each of different length: Their
  * resolving would be then O(n^2). */
-#define CODESPAN_MARK_MAXLEN 32
+static constexpr unsigned short CODESPAN_MARK_MAXLEN  = 32;
 
 static int md_is_code_span(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                            OFF *p_opener_beg, OFF *p_opener_end,
@@ -2905,6 +2904,14 @@ static int md_is_autolink_uri(Parsing_Context &ctx, OFF beg, OFF max_end,
   return true;
 }
 
+/*
+For simplicity's sake, check if email is autolinkable according to HTML's
+definition of the email attribute of the input tag.
+
+See 
+
+Basta de las guerras de regex.
+*/
 static int md_is_autolink_email(Parsing_Context &ctx, OFF beg, OFF max_end,
                                 OFF *p_end) {
   OFF off = beg + 1;
@@ -2958,7 +2965,7 @@ static int md_is_autolink_email(Parsing_Context &ctx, OFF beg, OFF max_end,
 }
 
 static int md_is_autolink(Parsing_Context &ctx, OFF beg, OFF max_end,
-                          OFF *p_end, int *p_missing_mailto) {
+                          OFF *p_end, bool *p_missing_mailto) {
   if (md_is_autolink_uri(ctx, beg, max_end, p_end)) {
     *p_missing_mailto = false;
     return true;
@@ -3153,9 +3160,9 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
       /* A potential autolink or raw HTML start/end. */
       if (ch == _T('<')) {
         OFF autolink_end;
-        int missing_mailto;
+        bool missing_mailto;
 
-        if (!(ctx.parser.flags & MD_FLAG_NOHTMLSPANS)) {
+        if (!(ctx.parser.flags.contains(No_Raw_HTML_Block))) {
           OFF html_end;
 
           /* Given the nature of the raw HTML, we have to recognize
@@ -3282,7 +3289,7 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
       }
 
       /* A potential table cell boundary or wiki link label delimiter. */
-      if ((table_mode || ctx.parser.flags & MD_FLAG_WIKILINKS) &&
+      if ((table_mode || ctx.parser.flags.contains(Wikilinks)) &&
           ch == _T('|')) {
         PUSH_MARK(ch, off, off + 1, 0);
         off++;
@@ -3453,7 +3460,7 @@ static int md_resolve_links(Parsing_Context &ctx, std::span<Line> lines) {
     /* Recognize and resolve wiki links.
      * Wiki-links maybe '[[destination]]' or '[[destination|label]]'.
      */
-    if ((ctx.parser.flags & MD_FLAG_WIKILINKS) &&
+    if ((ctx.parser.flags.contains(Wikilinks)) &&
         (opener->end - opener->beg == 1) && /* not image */
         next_opener != nullptr &&           /* double '[' opener */
         next_opener->ch == '[' && (next_opener->beg == opener->beg - 1) &&
@@ -3634,7 +3641,7 @@ static int md_resolve_links(Parsing_Context &ctx, std::span<Line> lines) {
       /* If the link text is formed by nothing but permissive autolink,
        * suppress the autolink.
        * See https://github.com/mity/md4c/issues/152 for more info. */
-      if (ctx.parser.flags & MD_FLAG_PERMISSIVEAUTOLINKS) {
+      if (ctx.parser.flags.contains(Permissive_Autolink)) {
         Mark *first_nested;
         Mark *last_nested;
 
@@ -4184,7 +4191,7 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
         break;
 
       case '_': /* Underline (or emphasis if we fall through). */
-        if (ctx.parser.flags & MD_FLAG_UNDERLINE) {
+        if (ctx.parser.flags.contains(Underline)) {
           if (mark->flags & MD_MARK_OPENER) {
             while (off < mark->end) {
               MD_ENTER_SPAN(SpanType::u, nullptr);
@@ -4739,7 +4746,7 @@ abort:
 }
 
 static int md_process_leaf_block(Parsing_Context &ctx, const Block *block) {
-  std::variant<h_Detail, code_Detail, table_Detail> det{};
+  std::variant<h_Detail, code_Detail, table_Detail> det;
   Attribute_Build info_build;
   Attribute_Build lang_build;
   bool is_in_tight_list;
@@ -4965,17 +4972,17 @@ static int md_start_new_block(Parsing_Context &ctx, const Line_Analysis *line) {
     block->type = BlockType::hr;
     break;
 
-  case LineType::MD_LINE_ATXHEADER:
-  case LineType::MD_LINE_SETEXTHEADER:
+  case LineType::ATX_header:
+  case LineType::set_ext_header:
     block->type = BlockType::heading;
     break;
 
-  case LineType::MD_LINE_FENCEDCODE:
-  case LineType::MD_LINE_INDENTEDCODE:
+  case LineType::fenced_code:
+  case LineType::indented_code:
     block->type = BlockType::code;
     break;
 
-  case LineType::MD_LINE_TEXT:
+  case LineType::text:
     block->type = BlockType::paragraph;
     break;
 
@@ -4984,8 +4991,8 @@ static int md_start_new_block(Parsing_Context &ctx, const Line_Analysis *line) {
     break;
 
   case LineType::blank:
-  case LineType::MD_LINE_SETEXTUNDERLINE:
-  case LineType::MD_LINE_TABLEUNDERLINE:
+  case LineType::set_ext_underline:
+  case LineType::table_underline:
   default:
     MD_UNREACHABLE();
     break;
@@ -5196,7 +5203,7 @@ static int md_is_atxheader_line(Parsing_Context &ctx, OFF beg, OFF *p_beg,
     return false;
   *p_level = n;
 
-  if (!(ctx.parser.flags & MD_FLAG_PERMISSIVEATXHEADERS) &&
+  if (!(ctx.parser.flags.contains(No_Space_Needed_for_ATXHeaders)) &&
       off < ctx.text.size() && CH(off) != _T(' ') && CH(off) != _T('\t') &&
       !ISNEWLINE(off))
     return false;
@@ -5231,7 +5238,7 @@ static bool md_is_setext_underline(Parsing_Context &ctx, OFF beg, OFF *p_end,
 static bool md_is_table_underline(Parsing_Context &ctx, OFF beg, OFF *p_end,
                                   unsigned *p_col_count) {
   OFF off = beg;
-  int found_pipe = false;
+  bool found_pipe = false;
   unsigned col_count = 0;
 
   if (off < ctx.text.size() && CH(off) == _T('|')) {
@@ -5821,7 +5828,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
 
   while (true) {
     /* Check whether we are fenced code continuation. */
-    if (pivot_line->type == LineType::MD_LINE_FENCEDCODE) {
+    if (pivot_line->type == LineType::fenced_code) {
       line->beg = off;
 
       /* We are another MD_LINE_FENCEDCODE unless we are closing fence
@@ -5841,7 +5848,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
         else
           line->indent = 0;
 
-        line->type = LineType::MD_LINE_FENCEDCODE;
+        line->type = LineType::fenced_code;
         break;
       }
     }
@@ -5876,9 +5883,9 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
 
     /* Check for blank line. */
     if (off >= ctx.text.size() || ISNEWLINE(off)) {
-      if (pivot_line->type == LineType::MD_LINE_INDENTEDCODE &&
+      if (pivot_line->type == LineType::indented_code &&
           n_parents == ctx.cont.size()) {
-        line->type = LineType::MD_LINE_INDENTEDCODE;
+        line->type = LineType::indented_code;
         if (line->indent > ctx.code_indent_offset)
           line->indent -= ctx.code_indent_offset;
         else
@@ -5937,12 +5944,12 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
 
     /* Check whether we are Setext underline. */
     if (line->indent < ctx.code_indent_offset &&
-        pivot_line->type == LineType::MD_LINE_TEXT && off < ctx.text.size() &&
+        pivot_line->type == LineType::text && off < ctx.text.size() &&
         ISANYOF2(off, _T('='), _T('-')) && (n_parents == ctx.cont.size())) {
       unsigned level;
 
       if (md_is_setext_underline(ctx, off, &off, &level)) {
-        line->type = LineType::MD_LINE_SETEXTUNDERLINE;
+        line->type = LineType::set_ext_underline;
         line->data = level;
         break;
       }
@@ -5997,8 +6004,8 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
      * Note indented code block cannot interrupt a paragraph. */
     if (line->indent >= ctx.code_indent_offset &&
         (pivot_line->type == LineType::blank ||
-         pivot_line->type == LineType::MD_LINE_INDENTEDCODE)) {
-      line->type = LineType::MD_LINE_INDENTEDCODE;
+         pivot_line->type == LineType::indented_code)) {
+      line->type = LineType::indented_code;
       MD_ASSERT(line->indent >= ctx.code_indent_offset);
       line->indent -= ctx.code_indent_offset;
       line->data = 0;
@@ -6008,13 +6015,13 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
     /* Check for start of a new container block. */
     if (line->indent < ctx.code_indent_offset &&
         md_is_container_mark(ctx, line->indent, off, &off, &container)) {
-      if (pivot_line->type == LineType::MD_LINE_TEXT &&
+      if (pivot_line->type == LineType::text &&
           n_parents == ctx.cont.size() &&
           (off >= ctx.text.size() || ISNEWLINE(off)) &&
           container.ch != _T('>')) {
         /* Noop. List mark followed by a blank line cannot interrupt a
          * paragraph. */
-      } else if (pivot_line->type == LineType::MD_LINE_TEXT &&
+      } else if (pivot_line->type == LineType::text &&
                  n_parents == ctx.cont.size() &&
                  ISANYOF2_(container.ch, _T('.'), _T(')')) &&
                  container.start != 1) {
@@ -6053,9 +6060,9 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
     }
 
     /* Check whether we are table continuation. */
-    if (pivot_line->type == LineType::MD_LINE_TABLE &&
+    if (pivot_line->type == LineType::table &&
         n_parents == ctx.cont.size()) {
-      line->type = LineType::MD_LINE_TABLE;
+      line->type = LineType::table;
       break;
     }
 
@@ -6065,7 +6072,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
       unsigned level;
 
       if (md_is_atxheader_line(ctx, off, &line->beg, &off, &level)) {
-        line->type = LineType::MD_LINE_ATXHEADER;
+        line->type = LineType::ATX_header;
         line->data = level;
         break;
       }
@@ -6074,7 +6081,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
     /* Check whether we are starting code fence. */
     if (off < ctx.text.size() && ISANYOF2(off, _T('`'), _T('~'))) {
       if (md_is_opening_code_fence(ctx, off, &off)) {
-        line->type = LineType::MD_LINE_FENCEDCODE;
+        line->type = LineType::fenced_code;
         line->data = 1;
         break;
       }
@@ -6082,12 +6089,12 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
 
     /* Check for start of raw HTML block. */
     if (off < ctx.text.size() && CH(off) == _T('<') &&
-        !(ctx.parser.flags & MD_FLAG_NOHTMLBLOCKS)) {
+        !(ctx.parser.flags.contains(No_Raw_HTML_Block))) {
       ctx.html_block_type = md_is_html_block_start_condition(ctx, off);
 
       /* HTML block type 7 cannot interrupt paragraph. */
       if (ctx.html_block_type == 7 &&
-          pivot_line->type == LineType::MD_LINE_TEXT)
+          pivot_line->type == LineType::text)
         ctx.html_block_type = 0;
 
       if (ctx.html_block_type > 0) {
@@ -6104,8 +6111,8 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
     }
 
     /* Check for table underline. */
-    if ((ctx.parser.flags & MD_FLAG_TABLES) &&
-        pivot_line->type == LineType::MD_LINE_TEXT && off < ctx.text.size() &&
+    if ((ctx.parser.flags.contains(Tables)) &&
+        pivot_line->type == LineType::text && off < ctx.text.size() &&
         ISANYOF3(off, _T('|'), _T('-'), _T(':')) &&
         n_parents == ctx.cont.size()) {
       unsigned col_count;
@@ -6113,21 +6120,21 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
       if (ctx.current_block != nullptr && ctx.current_block->n_lines == 1 &&
           md_is_table_underline(ctx, off, &off, &col_count)) {
         line->data = col_count;
-        line->type = LineType::MD_LINE_TABLEUNDERLINE;
+        line->type = LineType::table_underline;
         break;
       }
     }
 
     /* By default, we are normal text line. */
-    line->type = LineType::MD_LINE_TEXT;
-    if (pivot_line->type == LineType::MD_LINE_TEXT &&
+    line->type = LineType::text;
+    if (pivot_line->type == LineType::text &&
         n_brothers + n_children == 0) {
       /* Lazy continuation. */
       n_parents = ctx.cont.size();
     }
 
     /* Check for task mark. */
-    if ((ctx.parser.flags & MD_FLAG_TASKLISTS) && n_brothers + n_children > 0 &&
+    if ((ctx.parser.flags.contains(Tasklist)) && n_brothers + n_children > 0 &&
         ISANYOF_(ctx.cont[ctx.cont.size() - 1].ch, _T("-+*.)"))) {
       OFF tmp = off;
 
@@ -6185,20 +6192,20 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
   line->end = off;
 
   /* But for ATX header, we should exclude the optional trailing mark. */
-  if (line->type == LineType::MD_LINE_ATXHEADER) {
+  if (line->type == LineType::ATX_header) {
     OFF tmp = line->end;
     while (tmp > line->beg && CH(tmp - 1) == _T(' '))
       tmp--;
     while (tmp > line->beg && CH(tmp - 1) == _T('#'))
       tmp--;
     if (tmp == line->beg || CH(tmp - 1) == _T(' ') ||
-        (ctx.parser.flags & MD_FLAG_PERMISSIVEATXHEADERS))
+        (ctx.parser.flags.contains(No_Space_Needed_for_ATXHeaders)))
       line->end = tmp;
   }
 
   /* Trim trailing spaces. */
-  if (line->type != LineType::MD_LINE_INDENTEDCODE &&
-      line->type != LineType::MD_LINE_FENCEDCODE) {
+  if (line->type != LineType::indented_code &&
+      line->type != LineType::fenced_code) {
     while (line->end > line->beg && CH(line->end - 1) == _T(' '))
       line->end--;
   }
@@ -6263,7 +6270,7 @@ static int md_process_line(Parsing_Context &ctx,
   }
 
   /* Some line types form block on their own. */
-  if (line->type == LineType::hr || line->type == LineType::MD_LINE_ATXHEADER) {
+  if (line->type == LineType::hr || line->type == LineType::ATX_header) {
     MD_CHECK(md_end_current_block(ctx));
 
     /* Add our single-line block. */
@@ -6277,7 +6284,7 @@ static int md_process_line(Parsing_Context &ctx,
   /* LineType::MD_LINE_SETEXTUNDERLINE changes meaning of the current block and
    * ends it.
    */
-  if (line->type == LineType::MD_LINE_SETEXTUNDERLINE) {
+  if (line->type == LineType::set_ext_underline) {
     MD_ASSERT(ctx.current_block != nullptr);
     ctx.current_block->type = BlockType::heading;
     ctx.current_block->data = line->data;
@@ -6289,20 +6296,20 @@ static int md_process_line(Parsing_Context &ctx,
     } else {
       /* This happens if we have consumed all the body as link ref. defs.
        * and downgraded the underline into start of a new paragraph block. */
-      line->type = LineType::MD_LINE_TEXT;
+      line->type = LineType::text;
       *p_pivot_line = line;
     }
     return 0;
   }
 
   /* LineType::MD_LINE_TABLEUNDERLINE changes meaning of the current block. */
-  if (line->type == LineType::MD_LINE_TABLEUNDERLINE) {
+  if (line->type == LineType::table_underline) {
     MD_ASSERT(ctx.current_block != nullptr);
     MD_ASSERT(ctx.current_block->n_lines == 1);
     ctx.current_block->type = BlockType::table;
     ctx.current_block->data = line->data;
     MD_ASSERT(pivot_line != &md_dummy_blank_line);
-    ((Line_Analysis *)pivot_line)->type = LineType::MD_LINE_TABLE;
+    ((Line_Analysis *)pivot_line)->type = LineType::table;
     MD_CHECK(md_add_line_into_current_block(ctx, line));
     return 0;
   }
@@ -6397,7 +6404,7 @@ int md_parse(mdstringview text, const MD_PARSER &parser, void *userdata) {
   ctx.parser = parser;
   ctx.userdata = userdata;
   ctx.code_indent_offset =
-      (ctx.parser.flags & MD_FLAG_NOINDENTEDCODEBLOCKS) ? -1 : 4;
+      (ctx.parser.flags.contains(No_Indented_Codeblock)) ? -1 : 4;
   md_build_mark_char_map(ctx);
   ctx.doc_ends_with_newline = (text.size() > 0 && ISNEWLINE_(text.back()));
 

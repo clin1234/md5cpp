@@ -1,3 +1,8 @@
+/* md5cpp: fast Markdown parser in C++20.
+Copyright 2021 Charlie Lin
+This software is derived from md4c, and is licensed under the same terms as
+md4c, reproduced below:
+*/
 /*
  * MD4C: Markdown parser for C
  * (http://github.com/mity/md4c)
@@ -26,10 +31,13 @@
 #ifndef MD4C_H
 #define MD4C_H
 
+#include <unordered_map>
+#include <unordered_set>
 #ifdef __cplusplus
 #include <string>
-#include <vector>
 #include <string_view>
+#include <vector>
+
 #endif
 
 #if defined MD4C_USE_UTF16
@@ -222,7 +230,7 @@ using Align = MD_ALIGN;
  *
  * The image alt text is propagated as a normal text via the MD_PARSER::text()
  * callback. However, the image title ('foo &quot; bar') is propagated as
- * Attribute in MD_SPAN_IMG_DETAIL::title.
+ * Attribute in img_Detail::title.
  *
  * Then the attribute MD_SPAN_IMG_DETAIL::title shall provide the following:
  *  -- [0]: "foo "   (substr_types[0] == MD_TEXT_NORMAL; substr_offsets[0] == 0)
@@ -382,7 +390,7 @@ as having green and red backgrounds, respectively.  */
   (MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_TABLES | MD_FLAG_STRIKETHROUGH |      \
    MD_FLAG_TASKLISTS)
 #define MD_DIALECT_GITLAB                                                      \
-  MD_DIALECT_GITHUB | MD_FLAG_INLINE_DIFF | MD_FLAG_COLOR
+  MD_DIALECT_GITHUB | MD_FLAG_INLINE_DIFF | MD_FLAG_COLOR | MD_FLAG_TOC
 
 enum class Extensions : unsigned long {
   // Strictly CommonMark-compliant, no extensions
@@ -405,7 +413,8 @@ enum class Extensions : unsigned long {
   Tables = 1 << 7,
   /* Enable strikethrough extension. */
   Strikethrough = 1 << 8,
-  /* Enable WWW autolinks (even without any scheme prefix, if they begin with 'www.') */
+  /* Enable WWW autolinks (even without any scheme prefix, if they begin with
+     'www.') */
   Permissive_WWW_Autolink = 1 << 9,
   /* Enable task list extension. */
   Tasklist = 1 << 10,
@@ -428,6 +437,28 @@ enum class Extensions : unsigned long {
   Table_of_Contents = 1 << 17
 };
 
+using enum Extensions;
+const std::unordered_map<unsigned long, Extensions> macro_to_scoped_enum_ext{
+    {MD_FLAG_COLLAPSEWHITESPACE, Collapse_Whitespace},
+    {MD_FLAG_ABBREVIATIONS, Abbreviation},
+    {MD_FLAG_COLOR, Color},
+    {MD_FLAG_INLINE_DIFF, Inline_Diff},
+    {MD_FLAG_LATEXMATHSPANS, LaTeX_Math},
+    {MD_FLAG_NOHTMLBLOCKS, No_Raw_HTML_Block},
+    {MD_FLAG_NOHTMLSPANS, No_Raw_HTML_Inline},
+    {MD_FLAG_NOINDENTEDCODEBLOCKS, No_Indented_Codeblock},
+    {MD_FLAG_PERMISSIVEATXHEADERS, No_Space_Needed_for_ATXHeaders},
+    {MD_FLAG_PERMISSIVEAUTOLINKS, Permissive_Autolink},
+    {MD_FLAG_PERMISSIVEEMAILAUTOLINKS, Permissive_Email_Autolink},
+    {MD_FLAG_PERMISSIVEWWWAUTOLINKS, Permissive_WWW_Autolink},
+    {MD_FLAG_STRIKETHROUGH, Strikethrough},
+    {MD_FLAG_TABLES, Tables},
+    {MD_FLAG_TOC, Table_of_Contents},
+    {MD_FLAG_TASKLISTS, Tasklist},
+    {MD_FLAG_UNDERLINE, Underline},
+    {MD_FLAG_WIKILINKS, Wikilinks},
+};
+
 inline Extensions operator|(Extensions lhs, Extensions rhs) {
   using T = std::underlying_type_t<Extensions>;
   return static_cast<Extensions>(static_cast<T>(lhs) | static_cast<T>(rhs));
@@ -436,13 +467,13 @@ inline Extensions operator|(Extensions lhs, Extensions rhs) {
 /* Parser structure.
  */
 struct _MD_PARSER {
-  /* Reserved. Set to zero.
+  /* Reserved. Set to zero, perhaps need to bump?
    */
   unsigned abi_version;
 
-  /* Dialect options. Bitmask of MD_FLAG_xxxx values.
+  /* Dialect options containing set extensions.
    */
-  unsigned flags;
+  std::unordered_set<Extensions> flags;
 
   /* Caller-provided rendering callbacks.
    *

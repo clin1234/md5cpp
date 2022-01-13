@@ -36,6 +36,13 @@
 #define MD_HTML_FLAG_SKIP_UTF8_BOM          0x0004
 #define MD_HTML_FLAG_XHTML                  0x0008
 
+enum class RenderFlag : unsigned char{
+    Debug,
+    Verbatim_Entities = 1 << 1,
+    Skip_UTF8_BOM = 1 << 2,
+    XHTML = 1 << 3,
+};
+
 using mdstringview = std::basic_string_view<MD_CHAR>;
 
 /* Render Markdown into HTML.
