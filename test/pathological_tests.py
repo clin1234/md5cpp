@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import re
 import argparse
+import re
 import sys
-import platform
-from cmark import CMark
 from timeit import default_timer as timer
+
+from cmark import CMark
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run cmark tests.')
@@ -92,7 +92,10 @@ pathological = {
          re.compile("(\[ \(\]\(){50000}")),
     "broken thematic break":
         (("* " * 50000 + "a"),
-         re.compile("<ul>\r?\n(<li><ul>\r?\n){49999}<li>a</li>\r?\n</ul>\r?\n(</li>\r?\n</ul>\r?\n){49999}"))
+         re.compile("<ul>\r?\n(<li><ul>\r?\n){49999}<li>a</li>\r?\n</ul>\r?\n(</li>\r?\n</ul>\r?\n){49999}")),
+    "nested invalid link references":
+        (("[" * 50000 + "]" * 50000 + "\n\n[a]: /b"),
+         re.compile("\[{50000}\]{50000}"))
 }
 
 whitespace_re = re.compile('/s+/')
