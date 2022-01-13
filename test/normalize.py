@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from html.parser import HTMLParser
-import urllib
+import urllib.parse
 
 try:
     from html.parser import HTMLParseError
@@ -19,6 +19,8 @@ import html
 # https://github.com/karlcow/markdown-testsuite/
 significant_attrs = ["alt", "href", "src", "title"]
 whitespace_re = re.compile('\s+')
+
+
 class MyHTMLParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
@@ -27,6 +29,7 @@ class MyHTMLParser(HTMLParser):
         self.in_pre = False
         self.output = ""
         self.last_tag = ""
+
     def handle_data(self, data):
         after_tag = self.last == "endtag" or self.last == "starttag"
         after_block_tag = after_tag and self.is_block_tag(self.last_tag)
@@ -41,6 +44,7 @@ class MyHTMLParser(HTMLParser):
                 data = data.strip()
         self.output += data
         self.last = "data"
+
     def handle_endtag(self, tag):
         if tag == "pre":
             self.in_pre = False
@@ -49,44 +53,51 @@ class MyHTMLParser(HTMLParser):
         self.output += "</" + tag + ">"
         self.last_tag = tag
         self.last = "endtag"
+
     def handle_starttag(self, tag, attrs):
         if tag == "pre":
             self.in_pre = True
         if self.is_block_tag(tag):
             self.output = self.output.rstrip()
         self.output += "<" + tag
-        # For now we don't strip out 'extra' attributes, because of
+        # For now, we don't strip out 'extra' attributes, because of
         # raw HTML test cases.
         # attrs = filter(lambda attr: attr[0] in significant_attrs, attrs)
         if attrs:
             attrs.sort()
-            for (k,v) in attrs:
+            for (k, v) in attrs:
                 self.output += " " + k
-                if v in ['href','src']:
+                if v in ['href', 'src']:
                     self.output += ("=" + '"' +
-                            urllib.quote(urllib.unquote(v), safe='/') + '"')
-                elif v != None:
-                    self.output += ("=" + '"' + html.escape(v,quote=True) + '"')
+                                    urllib.parse.quote(urllib.parse.unquote(v), safe='/') + '"')
+                elif v is not None:
+                    self.output += ("=" + '"' + html.escape(v, quote=True) + '"')
         self.output += ">"
         self.last_tag = tag
         self.last = "starttag"
+
     def handle_startendtag(self, tag, attrs):
         """Ignore closing tag for self-closing """
         self.handle_starttag(tag, attrs)
         self.last_tag = tag
         self.last = "endtag"
+
     def handle_comment(self, data):
         self.output += '<!--' + data + '-->'
         self.last = "comment"
+
     def handle_decl(self, data):
         self.output += '<!' + data + '>'
         self.last = "decl"
+
     def unknown_decl(self, data):
         self.output += '<!' + data + '>'
         self.last = "decl"
-    def handle_pi(self,data):
+
+    def handle_pi(self, data):
         self.output += '<?' + data + '>'
         self.last = "pi"
+
     def handle_entityref(self, name):
         try:
             c = chr(name2codepoint[name])
@@ -94,6 +105,7 @@ class MyHTMLParser(HTMLParser):
             c = None
         self.output_char(c, '&' + name + ';')
         self.last = "ref"
+
     def handle_charref(self, name):
         try:
             if name.startswith("x"):
@@ -101,9 +113,10 @@ class MyHTMLParser(HTMLParser):
             else:
                 c = chr(int(name))
         except ValueError:
-                c = None
+            c = None
         self.output_char(c, '&' + name + ';')
         self.last = "ref"
+
     # Helpers.
     def output_char(self, c, fallback):
         if c == '<':
@@ -114,19 +127,20 @@ class MyHTMLParser(HTMLParser):
             self.output += "&amp;"
         elif c == '"':
             self.output += "&quot;"
-        elif c == None:
+        elif c is None:
             self.output += fallback
         else:
             self.output += c
 
-    def is_block_tag(self,tag):
+    def is_block_tag(self, tag):
         return (tag in ['article', 'header', 'aside', 'hgroup', 'blockquote',
-            'hr', 'iframe', 'body', 'li', 'map', 'button', 'object', 'canvas',
-            'ol', 'caption', 'output', 'col', 'p', 'colgroup', 'pre', 'dd',
-            'progress', 'div', 'section', 'dl', 'table', 'td', 'dt',
-            'tbody', 'embed', 'textarea', 'fieldset', 'tfoot', 'figcaption',
-            'th', 'figure', 'thead', 'footer', 'tr', 'form', 'ul',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'video', 'script', 'style'])
+                        'hr', 'iframe', 'body', 'li', 'map', 'button', 'object', 'canvas',
+                        'ol', 'caption', 'output', 'col', 'p', 'colgroup', 'pre', 'dd',
+                        'progress', 'div', 'section', 'dl', 'table', 'td', 'dt',
+                        'tbody', 'embed', 'textarea', 'fieldset', 'tfoot', 'figcaption',
+                        'th', 'figure', 'thead', 'footer', 'tr', 'form', 'ul',
+                        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'video', 'script', 'style'])
+
 
 def normalize_html(html):
     r"""

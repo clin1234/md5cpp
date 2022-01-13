@@ -65,7 +65,7 @@ static void render_html_escaped(HTML &r, mdstringview data) {
 #define NEED_HTML_ESC(ch)                                                      \
   (r.escape_map[(unsigned char)(ch)] & NEED_HTML_ESC_FLAG)
 
-  while (1) {
+  while (true) {
     /* Optimization: Use some loop unrolling. */
     while (off + 3 < data.size() && !NEED_HTML_ESC(data[off + 0]) &&
            !NEED_HTML_ESC(data[off + 1]) && !NEED_HTML_ESC(data[off + 2]) &&
@@ -108,7 +108,7 @@ static void render_url_escaped(HTML &r, mdstringview data) {
 /* Some characters need to be escaped in URL attributes. */
 #define NEED_URL_ESC(ch) (r.escape_map[(unsigned char)(ch)] & NEED_URL_ESC_FLAG)
 
-  while (1) {
+  while (true) {
     while (off < data.size() && !NEED_URL_ESC(data[off]))
       off++;
     if (off > beg)
@@ -467,11 +467,11 @@ static int enter_span_callback(SpanType type, void *detail, void *userdata) {
      * emphasis and other rich contents in that context similarly as in
      * any link label.
      *
-     * However, unlike in the case of links (where that contents becomes
+     * However, unlike in the case of links (where that contents become
      * contents of the <a>...</a> tag), in the case of images the contents
      * is supposed to fall into the attribute alt: <img alt="...">.
      *
-     * In that context we naturally cannot output nested HTML tags. So lets
+     * In that context we naturally cannot output nested HTML tags. So let's
      * suppress them and only output the plain text (i.e. what falls into
      * text() callback).
      *
@@ -617,17 +617,17 @@ int to_html(mdstringview input, void(*process_output)(mdstringview, void*),
                      leave_span_callback,
                      text_callback,
                      debug_log_callback,
-                     NULL};
+                     nullptr};
 
   /* Build map of characters which need escaping. */
   for (unsigned char i = 0; i <= std::numeric_limits<unsigned char>::max();
        i++) {
     auto ch = i;
 
-    if (strchr("\"&<>", ch) != NULL)
+    if (strchr("\"&<>", ch) != nullptr)
       render.escape_map[i] |= NEED_HTML_ESC_FLAG;
 
-    if (!std::isalnum(ch) && strchr("~-_.+!*(),%#@?=;:/,+$", ch) == NULL)
+    if (!std::isalnum(ch) && strchr("~-_.+!*(),%#@?=;:/,+$", ch) == nullptr)
       render.escape_map[i] |= NEED_URL_ESC_FLAG;
   }
 

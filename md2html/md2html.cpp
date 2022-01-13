@@ -47,7 +47,9 @@
 #ifdef __cpp_lib_format
 #include <format>
 #else
+
 #include <iomanip>
+
 #endif
 
 using mdstring = std::basic_string<MD_CHAR>;
@@ -57,7 +59,7 @@ using mdstringview = std::basic_string_view<MD_CHAR>;
 static unsigned parser_flags = 0;
 #ifndef MD4C_USE_ASCII
 static unsigned renderer_flags =
-    MD_HTML_FLAG_DEBUG | MD_HTML_FLAG_SKIP_UTF8_BOM;
+        MD_HTML_FLAG_DEBUG | MD_HTML_FLAG_SKIP_UTF8_BOM;
 #else
 static unsigned renderer_flags = MD_HTML_FLAG_DEBUG;
 #endif
@@ -128,177 +130,179 @@ membuf_append(struct membuffer* buf, const char* data, MD_SIZE size)
  **********************/
 
 static void process_output(mdstringview text, void *userdata) {
-  bof += text;
-  // TODO: band-aid to compile
-  // membuf_append((struct membuffer *)userdata, text, size);
+    bof += text;
+    // TODO: band-aid to compile
+    // membuf_append((struct membuffer *)userdata, text, size);
 }
 
 static int process_file(std::istream &in, std::ostream &out) {
-  int ret = -1;
+    int ret = -1;
 
-  mdstring in_buf{}, out_buf{};
+    mdstring in_buf{}, out_buf{};
 
-  const auto size{in.tellg()};
-  try {
-    assert(size != 0);
-    in_buf.reserve(size);
-  } catch (const std::length_error &e) {
-    std::clog << "Caught this exception: " << e.what() << '\n'
-    << "Got size "<< size;
-    throw;
-  }
-  in.seekg(0);
-  in.read(&in_buf[0], size);
+    const auto size{in.tellg()};
+    try {
+        assert(size != 0);
+        in_buf.reserve(size);
+    } catch (const std::length_error &e) {
+        std::clog << "Caught this exception: " << e.what() << '\n'
+                  << "Got size " << size;
+        throw;
+    }
+    in.seekg(0);
+    in.read(&in_buf[0], size);
 
-  /* Input size is good estimation of output size. Add some more reserve to
-   * deal with the HTML header/footer and tags. */
-  out_buf.resize(in_buf.size() + in_buf.size() / 8 + 64);
+    /* Input size is good estimation of output size. Add some more reserve to
+     * deal with the HTML header/footer and tags. */
+    out_buf.resize(in_buf.size() + in_buf.size() / 8 + 64);
 
-  auto t0 = std::chrono::steady_clock::now();
+    auto t0 = std::chrono::steady_clock::now();
 
-  /* Parse the document. This shall call our callbacks provided via the
-   * md_renderer_t structure. */
-  ret = to_html(in_buf, process_output, &out_buf, parser_flags, renderer_flags);
+    /* Parse the document. This shall call our callbacks provided via the
+     * md_renderer_t structure. */
+    ret = to_html(in_buf, process_output, &out_buf, parser_flags, renderer_flags);
 
-  auto t1 = std::chrono::steady_clock::now();
-  if (ret != 0) {
-    fprintf(stderr, "Parsing failed.\n");
-    return ret;
-  }
+    auto t1 = std::chrono::steady_clock::now();
+    if (ret != 0) {
+        fprintf(stderr, "Parsing failed.\n");
+        return ret;
+    }
 
-  /* Write down the document in the HTML format. */
-  if (want_fullhtml) {
-    if (want_xhtml) {
-      out <<
-          R"(<?xml version="1.0" encoding="UTF-8"?>
+    /* Write down the document in the HTML format. */
+    if (want_fullhtml) {
+        if (want_xhtml) {
+            out <<
+                R"(<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">
 <html xmlns="http://www.w3.org/1999/xhtml">
 )";
-    } else
-      out << R"(<!DOCTYPE html>
+        } else
+            out << R"(<!DOCTYPE html>
 <html>
 )";
-    out << R"(<head>
+        out << R"(<head>
 <title></title>
 <meta name="generator" content="md2html" />
 </head>
 <body>
 )";
-  }
+    }
 
-  if (want_fullhtml)
-    out << R"(
+    if (want_fullhtml)
+        out << R"(
 </body>
 </html>
 )";
 
-  if (want_stat) {
-    using std::chrono::duration_cast, std::chrono::seconds;
-    const auto elapsed {duration_cast<seconds>(t1 - t0)};
-    std::cerr <<
-#ifdef __cpp_lib_format
-        std::format("Time spend on parsing: {:f.3}", elapsed.count());
-#else
-        "Time spent on parsing: " << std::setprecision(2) << elapsed.count()
-              << " s.\n";
+    if (want_stat) {
+        using std::chrono::duration_cast, std::chrono::seconds;
+        const auto elapsed{duration_cast<seconds>(t1 - t0)};
+        std::cerr <<
+                  #ifdef __cpp_lib_format
+                  std::format("Time spend on parsing: {:f.3}", elapsed.count());
+                  #else
+                  "Time spent on parsing: " << std::setprecision(2) << elapsed.count()
+                  << " s.\n";
 #endif
-  }
+    }
 
-  /* Success if we have reached here. */
-  ret = 0;
+    /* Success if we have reached here. */
+    ret = 0;
 
-  return ret;
+    return ret;
 }
 
 
-
 struct Opt {
-  char short_opt;
-  std::string long_opt, description;
-  //std::string optional_arg{};
-  std::variant<std::monostate, RenderFlag, Extensions> flag;
+    char short_opt;
+    std::string long_opt, description;
+    //std::string optional_arg{};
+    std::variant<std::monostate, RenderFlag, Extensions> flag;
 };
 
 struct Option_Group {
-  std::string name;
-  std::vector<Opt> options;
+    std::string name;
+    std::vector<Opt> options;
 };
 
 std::string out;
 
 using enum Extensions; using enum RenderFlag;
 static const std::array cmdline_options{
-  Option_Group{"General", {
+        Option_Group{"General", {
 
-    Opt{'o', "output", "Output file (default is stdout)", {}},
-    Opt{'f', "full-html","Generate full HTML, including header",},
-    Opt{'s', "stat","Measure time of input parsing",},
-    Opt{'h', "help", "Print this help message",},
-    Opt{'v', "version","Display version"},
-  }},
-  Option_Group{"Dialect", {
-    Opt{'c', "commonmark","CommonMark (default)" },
-    Opt{'g', "github", "Github-flavored Markdown"},
-    Opt{'l', "gitlab", "Gitlab-flavored Markdown"},
-  }},
-  Option_Group{"Extensions" , {
-    Opt{'W', "fcollapse-whitespace", "Collapse non-trivial whitespace", Collapse_Whitespace,},
-    Opt{'L', "flatex-math", "Enable LaTeX-style math spans", LaTeX_Math,},
-    Opt{'A', "fpermissive-atx-headers", "Allow ATX headers without delimiting space", No_Space_Needed_for_ATXHeaders,},
-    Opt{'V', "fpermissive-autolinks", "Same as enabling the next three options",Permissive_Autolink},
-    Opt{'@', "fpermissive-email-autolinks", "Allow email autolinks without angle brackets and 'mailto:' scheme",Permissive_Email_Autolink},
-    Opt{'U', "fpermissive-url-autolinks", "Allow URL autolinks without angle brackets",},
-    Opt{'.', "fpermissive-www-autolinks", "Allow WWW autolinks without a scheme (e.g. http[s]://)", Permissive_WWW_Autolink},
-    Opt{'S', "fstrikethrough", "Enable strike-through spans", Strikethrough},
-    Opt{'T', "ftables", "Enable tables", Tables},
-    Opt{'X', "ftasklists", "Enable task lists", Tasklist},
-    Opt{'_', "funderline", "Enable underline spans", Underline},
-    Opt{'K', "fwiki-links", "Enable wiki links", Wikilinks},
-    Opt{'t', "ftoc", "Enable table of contents", Table_of_Contents},
-    Opt{'i', "finline-diff", "Enable Git-style inline diffs", Inline_Diff},
-    Opt{'c', "fcolor", "Render RGB or HCL values", Color},
-    Opt{'a', "fabbreviations", "Enable abbreviations using Markdown Extra's syntax", Abbreviation},
-  }},
-  Option_Group{"Markdown suppression", {
-    Opt{'F', "fno-html-blocks", "Disable raw HTML blocks",No_Raw_HTML_Block},
-    Opt{'G', "fno-html-spans", "Disable raw HTML spans", No_Raw_HTML_Inline},
-    Opt{'H', "fno-html", "Disable HTML features listed above", },
-    Opt{'I', "fno-indented-code", "Disable indented code blocks", No_Indented_Codeblock},
-  }},
-  Option_Group{"Rendering", {
-    Opt{'E', "fverbatim-entities", "Do not translate entities", Verbatim_Entities},
-    Opt{'x', "xhtml","Generate XHTML instead of HTML", XHTML},
-  }},
+                Opt{'o', "output", "Output file (default is stdout)", {}},
+                Opt{'f', "full-html", "Generate full HTML, including header", {}},
+                Opt{'s', "stat", "Measure time of input parsing", {}},
+                Opt{'h', "help", "Print this help message", {}},
+                Opt{'v', "version", "Display version", {}},
+        }},
+        Option_Group{"Dialect", {
+                Opt{'c', "commonmark", "CommonMark (default)", {}},
+                Opt{'g', "github", "Github-flavored Markdown", {}},
+                Opt{'l', "gitlab", "Gitlab-flavored Markdown", {}},
+        }},
+        Option_Group{"Extensions", {
+                Opt{'W', "fcollapse-whitespace", "Collapse non-trivial whitespace", Collapse_Whitespace,},
+                Opt{'L', "flatex-math", "Enable LaTeX-style math spans", LaTeX_Math,},
+                Opt{'A', "fpermissive-atx-headers", "Allow ATX headers without delimiting space",
+                    No_Space_Needed_for_ATXHeaders,},
+                Opt{'V', "fpermissive-autolinks", "Same as enabling the next three options", Permissive_Autolink},
+                Opt{'@', "fpermissive-email-autolinks",
+                    "Allow email autolinks without angle brackets and 'mailto:' scheme", Permissive_Email_Autolink},
+                Opt{'U', "fpermissive-url-autolinks", "Allow URL autolinks without angle brackets",},
+                Opt{'.', "fpermissive-www-autolinks", "Allow WWW autolinks without a scheme (e.g. http[s]://)",
+                    Permissive_WWW_Autolink},
+                Opt{'S', "fstrikethrough", "Enable strike-through spans", Strikethrough},
+                Opt{'T', "ftables", "Enable tables", Tables},
+                Opt{'X', "ftasklists", "Enable task lists", Tasklist},
+                Opt{'_', "funderline", "Enable underline spans", Underline},
+                Opt{'K', "fwiki-links", "Enable wiki links", Wikilinks},
+                Opt{'t', "ftoc", "Enable table of contents", Table_of_Contents},
+                Opt{'i', "finline-diff", "Enable Git-style inline diffs", Inline_Diff},
+                Opt{'c', "fcolor", "Render RGB or HCL values", Color},
+                Opt{'a', "fabbreviations", "Enable abbreviations using Markdown Extra's syntax", Abbreviation},
+        }},
+        Option_Group{"Markdown suppression", {
+                Opt{'F', "fno-html-blocks", "Disable raw HTML blocks", No_Raw_HTML_Block},
+                Opt{'G', "fno-html-spans", "Disable raw HTML spans", No_Raw_HTML_Inline},
+                Opt{'H', "fno-html", "Disable HTML features listed above",},
+                Opt{'I', "fno-indented-code", "Disable indented code blocks", No_Indented_Codeblock},
+        }},
+        Option_Group{"Rendering", {
+                Opt{'E', "fverbatim-entities", "Do not translate entities", Verbatim_Entities},
+                Opt{'x', "xhtml", "Generate XHTML instead of HTML", XHTML},
+        }},
 };
 
 auto parse_opts(int a, char **v) {
-  cxxopts::Options options(
-      "md2html",
-      "Convert input FILE (or standard input) in Markdown format to HTML.");
-  options.positional_help("[ input file ]").show_positional_help();
-  std::vector<std::string> groups{};
-  for (const auto& group : cmdline_options) {
-    groups.emplace_back(group.name);
-    auto&& tmp = options.add_options(group.name);
-    for (auto [short_o,long_o,desc,opt] : group.options) {
-      if (opt.empty()) tmp(long_o.insert(0, ",").insert(0, short_o, 1), desc);
-      else tmp(long_o.insert(0, ",").insert(0, short_o, 1), desc, cxxopts::value<decltype(opt)>());
+    cxxopts::Options options(
+            "md2html",
+            "Convert input FILE (or standard input) in Markdown format to HTML.");
+    options.positional_help("[ input file ]").show_positional_help();
+    std::vector<std::string> groups{};
+    for (const auto &group: cmdline_options) {
+        groups.emplace_back(group.name);
+        auto &&tmp = options.add_options(group.name);
+        for (auto[short_o, long_o, desc, opt]: group.options) {
+            if (opt.empty()) tmp(long_o.insert(0, ",").insert(0, short_o, 1), desc);
+            else tmp(long_o.insert(0, ",").insert(0, short_o, 1), desc, cxxopts::value<decltype(opt)>());
+        }
     }
-  }
 
-  cxxopts::ParseResult res;
-  try {
-    res = options.parse(a, v);
-  } catch (const cxxopts::option_not_exists_exception &e) {
-    std::cerr << e.what() << '\n';
-    std::cout << options.help(groups);
-    // std::exit(1);
-  }
-  if (res.count("h")) {
-    std::cout << options.help(groups);
-    std::exit(0);
-  }
-  return res;
+    cxxopts::ParseResult res;
+    try {
+        res = options.parse(a, v);
+    } catch (const cxxopts::option_not_exists_exception &e) {
+        std::cerr << e.what() << '\n';
+        std::cout << options.help(groups);
+        // std::exit(1);
+    }
+    if (res.count("h")) {
+        std::cout << options.help(groups);
+        std::exit(0);
+    }
+    return res;
 }
 
 /*
@@ -362,189 +366,195 @@ HTML generator options:
 )");
 }*/
 
-static void apply_opts(cxxopts::ParseResult re) {
-  auto f = re.arguments();
-  std::ranges::remove_if(f, [](cxxopts::KeyValue& k){return k.key()=="h";});
-  for (const auto& opt_group : cmdline_options) {
-    if (opt_group.name == "General") {
-      for (const auto& opt : opt_group.options) {
-        switch (opt.short_opt) {
-        case 'v': std::cout << MD_VERSION << '\n'; std::exit(0);
-        case 'f': want_fullhtml = true; break;
-        case 's': want_stat = true; break;
+static void apply_opts(const cxxopts::ParseResult &re) {
+    auto f = re.arguments();
+    std::ranges::remove_if(f, [](cxxopts::KeyValue &k) { return k.key() == "h"; });
+    for (const auto &opt_group: cmdline_options) {
+        if (opt_group.name == "General") {
+            for (const auto &opt: opt_group.options) {
+                switch (opt.short_opt) {
+                    case 'v':
+                        std::cout << MD_VERSION << '\n';
+                        std::exit(0);
+                    case 'f':
+                        want_fullhtml = true;
+                        break;
+                    case 's':
+                        want_stat = true;
+                        break;
+                }
+            }
+        } else if (opt_group.name == "Extensions" or opt_group.name == "Markdown suppression") {
+            for (const auto &opt: opt_group.options) {
+                if (re.count(opt.long_opt)) {
+                    parser_flags |= std::get<Extensions>(opt.flag);
+                }
+            }
+        } else if (opt_group.name == "Rendering") {
+            for (const auto &opt: opt_group.options) {
+                if (re.count(opt.long_opt)) {
+                    renderer_flags |= std::get<RenderFlag>(opt.flag);
+                }
+            }
         }
-      }
     }
-    else if (opt_group.name == "Extensions") {
-      for (const auto& opt : opt_group.options) {
-        if (re.count(opt.long_opt)) {
-          parser_flags |= std::get<Extensions>(opt.flag);
-        }
-      }
-    }
-    else if (opt_group.name == "Rendering") {
-      for (const auto& opt : opt_group.options) {
-        if (re.count(opt.long_opt)) {
-          renderer_flags |= std::get<RenderFlag>(opt.flag);
-        }
-      }
-    }
-  }
 }
 
 using namespace std::filesystem;
 static path input_path, output_path;
+
 static int cmdline_callback(int opt, char const *value,
                             [[maybe_unused]] void *data) {
-  switch (opt) {
-  case 0:
-    if (!input_path.empty()) {
-      fprintf(stderr,
-              "Too many arguments. Only one input file can be specified.\n");
-      fprintf(stderr, "Use --help for more info.\n");
-      exit(1);
+    switch (opt) {
+        case 0:
+            if (!input_path.empty()) {
+                fprintf(stderr,
+                        "Too many arguments. Only one input file can be specified.\n");
+                fprintf(stderr, "Use --help for more info.\n");
+                exit(1);
+            }
+            input_path = value;
+            break;
+
+        case 'o':
+            output_path = value;
+            break;
+        case 'f':
+            want_fullhtml = true;
+            break;
+        case 'x':
+            want_xhtml = true;
+            renderer_flags |= MD_HTML_FLAG_XHTML;
+            break;
+        case 's':
+            want_stat = true;
+            break;
+        case 'h':
+            usage();
+            exit(0);
+            break;
+        case 'v':
+            version();
+            exit(0);
+            break;
+
+        case 'c':
+            parser_flags = MD_DIALECT_COMMONMARK;
+            break;
+        case 'g':
+            parser_flags = MD_DIALECT_GITHUB;
+            break;
+        case 'l':
+            parser_flags |= MD_DIALECT_GITLAB;
+            break;
+
+        case 'E':
+            renderer_flags |= MD_HTML_FLAG_VERBATIM_ENTITIES;
+            break;
+        case 'A':
+            parser_flags |= MD_FLAG_PERMISSIVEATXHEADERS;
+            break;
+        case 'I':
+            parser_flags |= MD_FLAG_NOINDENTEDCODEBLOCKS;
+            break;
+        case 'F':
+            parser_flags |= MD_FLAG_NOHTMLBLOCKS;
+            break;
+        case 'G':
+            parser_flags |= MD_FLAG_NOHTMLSPANS;
+            break;
+        case 'H':
+            parser_flags |= MD_FLAG_NOHTML;
+            break;
+        case 'W':
+            parser_flags |= MD_FLAG_COLLAPSEWHITESPACE;
+            break;
+        case 'U':
+            parser_flags |= MD_FLAG_PERMISSIVEURLAUTOLINKS;
+            break;
+        case '.':
+            parser_flags |= MD_FLAG_PERMISSIVEWWWAUTOLINKS;
+            break;
+        case '@':
+            parser_flags |= MD_FLAG_PERMISSIVEEMAILAUTOLINKS;
+            break;
+        case 'V':
+            parser_flags |= MD_FLAG_PERMISSIVEAUTOLINKS;
+            break;
+        case 'T':
+            parser_flags |= MD_FLAG_TABLES;
+            break;
+        case 'S':
+            parser_flags |= MD_FLAG_STRIKETHROUGH;
+            break;
+        case 'L':
+            parser_flags |= MD_FLAG_LATEXMATHSPANS;
+            break;
+        case 'K':
+            parser_flags |= MD_FLAG_WIKILINKS;
+            break;
+        case 'X':
+            parser_flags |= MD_FLAG_TASKLISTS;
+            break;
+        case '_':
+            parser_flags |= MD_FLAG_UNDERLINE;
+            break;
+        case 'i':
+            parser_flags |= MD_FLAG_INLINE_DIFF;
+            break;
+        case 'C':
+            parser_flags |= MD_FLAG_COLOR;
+            break;
+        case 'a':
+            parser_flags |= MD_FLAG_ABBREVIATIONS;
+            break;
+        case 't':
+            parser_flags |= MD_FLAG_TOC;
+            break;
+
+        default:
+            fprintf(stderr, "Illegal option: %s\n", value);
+            fprintf(stderr, "Use --help for more info.\n");
+            exit(1);
+            break;
     }
-    input_path = value;
-    break;
 
-  case 'o':
-    output_path = value;
-    break;
-  case 'f':
-    want_fullhtml = true;
-    break;
-  case 'x':
-    want_xhtml = true;
-    renderer_flags |= MD_HTML_FLAG_XHTML;
-    break;
-  case 's':
-    want_stat = true;
-    break;
-  case 'h':
-    usage();
-    exit(0);
-    break;
-  case 'v':
-    version();
-    exit(0);
-    break;
-
-  case 'c':
-    parser_flags = MD_DIALECT_COMMONMARK;
-    break;
-  case 'g':
-    parser_flags = MD_DIALECT_GITHUB;
-    break;
-  case 'l':
-    parser_flags |= MD_DIALECT_GITLAB;
-    break;
-
-  case 'E':
-    renderer_flags |= MD_HTML_FLAG_VERBATIM_ENTITIES;
-    break;
-  case 'A':
-    parser_flags |= MD_FLAG_PERMISSIVEATXHEADERS;
-    break;
-  case 'I':
-    parser_flags |= MD_FLAG_NOINDENTEDCODEBLOCKS;
-    break;
-  case 'F':
-    parser_flags |= MD_FLAG_NOHTMLBLOCKS;
-    break;
-  case 'G':
-    parser_flags |= MD_FLAG_NOHTMLSPANS;
-    break;
-  case 'H':
-    parser_flags |= MD_FLAG_NOHTML;
-    break;
-  case 'W':
-    parser_flags |= MD_FLAG_COLLAPSEWHITESPACE;
-    break;
-  case 'U':
-    parser_flags |= MD_FLAG_PERMISSIVEURLAUTOLINKS;
-    break;
-  case '.':
-    parser_flags |= MD_FLAG_PERMISSIVEWWWAUTOLINKS;
-    break;
-  case '@':
-    parser_flags |= MD_FLAG_PERMISSIVEEMAILAUTOLINKS;
-    break;
-  case 'V':
-    parser_flags |= MD_FLAG_PERMISSIVEAUTOLINKS;
-    break;
-  case 'T':
-    parser_flags |= MD_FLAG_TABLES;
-    break;
-  case 'S':
-    parser_flags |= MD_FLAG_STRIKETHROUGH;
-    break;
-  case 'L':
-    parser_flags |= MD_FLAG_LATEXMATHSPANS;
-    break;
-  case 'K':
-    parser_flags |= MD_FLAG_WIKILINKS;
-    break;
-  case 'X':
-    parser_flags |= MD_FLAG_TASKLISTS;
-    break;
-  case '_':
-    parser_flags |= MD_FLAG_UNDERLINE;
-    break;
-  case 'i':
-    parser_flags |= MD_FLAG_INLINE_DIFF;
-    break;
-  case 'C':
-    parser_flags |= MD_FLAG_COLOR;
-    break;
-  case 'a':
-    parser_flags |= MD_FLAG_ABBREVIATIONS;
-    break;
-  case 't':
-    parser_flags |= MD_FLAG_TOC;
-    break;
-
-  default:
-    fprintf(stderr, "Illegal option: %s\n", value);
-    fprintf(stderr, "Use --help for more info.\n");
-    exit(1);
-    break;
-  }
-
-  return 0;
+    return 0;
 }
 
 int main(int argc, char **argv) {
-  int ret = 0;
-  auto p{parse_opts(argc, argv)};
-  std::ifstream input_file(input_path);
-  std::ofstream output_file(output_path, std::ios_base::trunc);
+    int ret = 0;
+    auto p{parse_opts(argc, argv)};
+    apply_opts(p);
+    std::ifstream input_file(input_path);
+    std::ofstream output_file(output_path, std::ios_base::trunc);
 
-  std::istream &in{input_path.compare("-") == 0 ? std::cin : input_file};
-  std::ostream &out{input_path.compare("-") == 0 ? std::cout : output_file};
-  ret = process_file(in, out);
-
-  /*
-    if (input_path != NULL && strcmp(input_path, "-") != 0) {
-      in = fopen(input_path, "rb");
-      if (in == NULL) {
-        fprintf(stderr, "Cannot open %s.\n", input_path);
-        exit(1);
-      }
-    }
-    if (output_path != NULL && strcmp(output_path, "-") != 0) {
-      out = fopen(output_path, "wt");
-      if (out == NULL) {
-        fprintf(stderr, "Cannot open %s.\n", output_path);
-        exit(1);
-      }
-    }
-
+    std::istream &in{input_path.compare("-") == 0 ? std::cin : input_file};
+    std::ostream &out{input_path.compare("-") == 0 ? std::cout : output_file};
     ret = process_file(in, out);
-    if (in != stdin)
-      fclose(in);
-    if (out != stdout)
-      fclose(out);
-      */
 
-  return ret;
+    /*
+      if (input_path != NULL && strcmp(input_path, "-") != 0) {
+        in = fopen(input_path, "rb");
+        if (in == NULL) {
+          fprintf(stderr, "Cannot open %s.\n", input_path);
+          exit(1);
+        }
+      }
+      if (output_path != NULL && strcmp(output_path, "-") != 0) {
+        out = fopen(output_path, "wt");
+        if (out == NULL) {
+          fprintf(stderr, "Cannot open %s.\n", output_path);
+          exit(1);
+        }
+      }
+
+      ret = process_file(in, out);
+      if (in != stdin)
+        fclose(in);
+      if (out != stdout)
+        fclose(out);
+        */
+
+    return ret;
 }

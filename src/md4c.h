@@ -390,7 +390,7 @@ as having green and red backgrounds, respectively.  */
   (MD_FLAG_PERMISSIVEAUTOLINKS | MD_FLAG_TABLES | MD_FLAG_STRIKETHROUGH |      \
    MD_FLAG_TASKLISTS)
 #define MD_DIALECT_GITLAB                                                      \
-  MD_DIALECT_GITHUB | MD_FLAG_INLINE_DIFF | MD_FLAG_COLOR | MD_FLAG_TOC
+  (MD_DIALECT_GITHUB | MD_FLAG_INLINE_DIFF | MD_FLAG_COLOR | MD_FLAG_TOC)
 
 enum class Extensions : unsigned long {
   // Strictly CommonMark-compliant, no extensions

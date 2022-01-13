@@ -4,7 +4,7 @@
 
 #set -e
 
-SELF_DIR=`dirname $0`
+SELF_DIR=$(dirname "$0")
 PROJECT_DIR="$SELF_DIR/.."
 TEST_DIR="$PROJECT_DIR/test"
 
@@ -21,7 +21,7 @@ if which py >>/dev/null 2>&1; then
 elif which python3 >>/dev/null 2>&1; then
     PYTHON=python3
 elif which python >>/dev/null 2>&1; then
-    if [ `python --version | awk '{print $2}' | cut -d. -f1` -ge 3 ]; then
+    if [ $(python --version | awk '{print $2}' | cut -d. -f1) -ge 3 ]; then
         PYTHON=python
     fi
 fi

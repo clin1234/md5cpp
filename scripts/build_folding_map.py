@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import textwrap
 import pathlib
+import textwrap
 
-status_list = [ "C", "F" ]
-folding_list = [dict()]*3
+status_list = ["C", "F"]
+folding_list = [dict()] * 3
 path = pathlib.Path('unicode/CaseFolding.txt')
 with path.open() as f:
     # Filter the foldings for "full" folding.
@@ -26,9 +24,10 @@ with path.open() as f:
         mapping_len = len(mapping)
 
         if mapping_len in range(1, 4):
-            folding_list[mapping_len-1][codepoint] = mapping
+            folding_list[mapping_len - 1][codepoint] = mapping
         else:
-            assert(False)
+            assert False
+
 
 # If we assume that (index0 ... index-1) makes a range (as defined below),
 # check that the newly provided index is compatible with the range too; i.e.
@@ -49,33 +48,34 @@ with path.open() as f:
 def is_range_compatible(folding, codepoint_list, index0, index):
     N = index - index0
     codepoint0 = codepoint_list[index0]
-    codepoint1 = codepoint_list[index0+1]
+    codepoint1 = codepoint_list[index0 + 1]
     codepointN = codepoint_list[index]
     mapping0 = folding[codepoint0]
     mapping1 = folding[codepoint1]
     mappingN = folding[codepointN]
 
     # Check the range type (1):
-    if codepoint1 - codepoint0 == 1 and codepointN - codepoint0 == N                \
-            and mapping1[0] - mapping0[0] == 1 and mapping1[1:] == mapping0[1:]     \
+    if codepoint1 - codepoint0 == 1 and codepointN - codepoint0 == N \
+            and mapping1[0] - mapping0[0] == 1 and mapping1[1:] == mapping0[1:] \
             and mappingN[0] - mapping0[0] == N and mappingN[1:] == mapping0[1:]:
         return True
 
     # Check the range type (2):
-    if codepoint1 - codepoint0 == 2 and codepointN - codepoint0 == 2 * N            \
-            and mapping0[0] - codepoint0 == 1                                       \
-            and mapping1[0] - codepoint1 == 1 and mapping1[1:] == mapping0[1:]      \
+    if codepoint1 - codepoint0 == 2 and codepointN - codepoint0 == 2 * N \
+            and mapping0[0] - codepoint0 == 1 \
+            and mapping1[0] - codepoint1 == 1 and mapping1[1:] == mapping0[1:] \
             and mappingN[0] - codepointN == 1 and mappingN[1:] == mapping0[1:]:
         return True
 
     return False
 
 
-def mapping_str(list, mapping):
+def mapping_str(mapping):
     return ",".join(f"0x{x:04x}" for x in mapping)
 
+
 for mapping_len in range(1, 4):
-    folding = folding_list[mapping_len-1]
+    folding = folding_list[mapping_len - 1]
     codepoint_list = list(folding)
 
     index0 = 0
@@ -91,25 +91,22 @@ for mapping_len in range(1, 4):
 
         if index1 - index0 > 2:
             # Range of codepoints
-            records.append("R(0x{:04x},0x{:04x})".format(codepoint_list[index0], codepoint_list[index1-1]))
-            data_records.append(mapping_str(data_records, folding[codepoint_list[index0]]))
-            data_records.append(mapping_str(data_records, folding[codepoint_list[index1-1]]))
+            records.append("R(0x{:04x},0x{:04x})".format(codepoint_list[index0], codepoint_list[index1 - 1]))
+            data_records.append(mapping_str(folding[codepoint_list[index0]]))
+            data_records.append(mapping_str(folding[codepoint_list[index1 - 1]]))
             index0 = index1
         else:
             # Single codepoint
             records.append("S(0x{:04x})".format(codepoint_list[index0]))
-            data_records.append(mapping_str(data_records, folding[codepoint_list[index0]]))
+            data_records.append(mapping_str(folding[codepoint_list[index0]]))
             index0 += 1
 
     print(f"static constexpr unsigned FOLD_MAP_{mapping_len}[] = {{")
     print(textwrap.fill(", ".join(records), 110,
-                        initial_indent = "    ", subsequent_indent="    "))
+                        initial_indent="    ", subsequent_indent="    "))
     print("};")
 
     print(f"static constexpr unsigned FOLD_MAP_{mapping_len}_DATA[] = {{")
     print(textwrap.fill(", ".join(data_records), 110,
-                        initial_indent = "    ", subsequent_indent="    "))
+                        initial_indent="    ", subsequent_indent="    "))
     print("};")
-
-
-

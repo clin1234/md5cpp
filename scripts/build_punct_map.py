@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import textwrap
 import pathlib
+import textwrap
 
 codepoint_list = []
-category_list = [ "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps" ]
+category_list = ["Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps"]
 
 path = pathlib.Path("unicode/DerivedGeneralCategory.txt")
 with path.open() as f:
@@ -29,7 +27,7 @@ with path.open() as f:
         delim_off = char_range.find("..")
         if delim_off >= 0:
             codepoint0 = int(char_range[:delim_off], 16)
-            codepoint1 = int(char_range[delim_off+2:], 16)
+            codepoint1 = int(char_range[delim_off + 2:], 16)
             for codepoint in range(codepoint0, codepoint1 + 1):
                 codepoint_list.append(codepoint)
         else:
@@ -44,12 +42,12 @@ count = len(codepoint_list)
 records = list()
 while index0 < count:
     index1 = index0 + 1
-    while index1 < count and codepoint_list[index1] == codepoint_list[index1-1] + 1:
+    while index1 < count and codepoint_list[index1] == codepoint_list[index1 - 1] + 1:
         index1 += 1
 
     if index1 - index0 > 1:
         # Range of codepoints
-        records.append("R(0x{:04x},0x{:04x})".format(codepoint_list[index0], codepoint_list[index1-1]))
+        records.append("R(0x{:04x},0x{:04x})".format(codepoint_list[index0], codepoint_list[index1 - 1]))
     else:
         # Single codepoint
         records.append("S(0x{:04x})".format(codepoint_list[index0]))
@@ -58,5 +56,5 @@ while index0 < count:
 
 print("static constexpr unsigned PUNCT_MAP[] = {")
 print(textwrap.fill(", ".join(records), 110,
-                    initial_indent = "    ", subsequent_indent="    "))
+                    initial_indent="    ", subsequent_indent="    "))
 print("};")

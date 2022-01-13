@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import textwrap
 import pathlib
+import textwrap
 
 codepoint_list = []
 category_list = ["Zs"]
@@ -29,7 +27,7 @@ with path.open() as f:
         delim_off = char_range.find("..")
         if delim_off >= 0:
             codepoint0 = int(char_range[:delim_off], 16)
-            codepoint1 = int(char_range[delim_off + 2 :], 16)
+            codepoint1 = int(char_range[delim_off + 2:], 16)
             for codepoint in range(codepoint0, codepoint1 + 1):
                 codepoint_list.append(codepoint)
         else:

@@ -303,7 +303,6 @@ struct MD_VERBATIMLINE_tag {
 #define ISCNTRL(off) ISCNTRL_(CH(off))
 #define ISPUNCT(off) ISPUNCT_(CH(off))
 #define ISUPPER(off) ISUPPER_(CH(off))
-#define ISLOWER(off) ISLOWER_(CH(off))
 #define ISALPHA(off) ISALPHA_(CH(off))
 #define ISDIGIT(off) ISDIGIT_(CH(off))
 #define ISXDIGIT(off) ISXDIGIT_(CH(off))
@@ -327,7 +326,7 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
   int ret = 0;
   size_t new_size = str.size();
 
-  while (1) {
+  while (true) {
     while (off < new_size && str[off] != _T('\0'))
       off++;
 
@@ -396,7 +395,7 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
 
 #define MD_TEXT(type, str)                                                     \
   do {                                                                         \
-    if (str.size() > 0) {                                                      \
+    if ((str).size() > 0) {                                                      \
       ret = ctx.parser.text((type), (str), ctx.userdata);                      \
       if (ret != 0) {                                                          \
         MD_LOG("Aborted from text() callback.");                               \
@@ -407,7 +406,7 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
 
 #define MD_TEXT_INSECURE(type, str)                                            \
   do {                                                                         \
-    if (str.size() > 0) {                                                      \
+    if ((str).size() > 0) {                                                      \
       ret = md_text_with_null_replacement(ctx, type, str);                     \
       if (ret != 0) {                                                          \
         MD_LOG("Aborted from text() callback.");                               \
@@ -431,7 +430,7 @@ struct Unicode_Fold_Info {
  *
  * Returns index of the found record in the map (in the case of ranges,
  * the minimal value is used); or -1 on failure. */
-static int md_unicode_bsearch__(unsigned codepoint,
+static int md_unicode_bsearch_(unsigned codepoint,
                                 std::span<const unsigned> map) {
   int beg, end;
   int pivot_beg, pivot_end;
@@ -473,7 +472,7 @@ static bool md_is_unicode_whitespace__(unsigned codepoint) {
   if (codepoint <= 0x7f)
     return ISWHITESPACE_(codepoint);
 
-  return (md_unicode_bsearch__(codepoint, std::span(WHITESPACE_MAP)) >= 0);
+  return (md_unicode_bsearch_(codepoint, std::span(WHITESPACE_MAP)) >= 0);
 }
 
 static bool md_is_unicode_punct__(unsigned codepoint) {
@@ -552,7 +551,7 @@ static bool md_is_unicode_punct__(unsigned codepoint) {
   if (codepoint <= 0x7f)
     return ISPUNCT_(codepoint);
 
-  return (md_unicode_bsearch__(codepoint, std::span(PUNCT_MAP)) >= 0);
+  return (md_unicode_bsearch_(codepoint, std::span(PUNCT_MAP)) >= 0);
 }
 
 static void md_get_unicode_fold_info(unsigned codepoint,
@@ -733,7 +732,7 @@ static void md_get_unicode_fold_info(unsigned codepoint,
 
   /* Try to locate the codepoint in any of the maps. */
   for (const auto &[map, data, n_codepoints] : FOLD_MAP_LIST) {
-    int index = md_unicode_bsearch__(codepoint, map);
+    int index = md_unicode_bsearch_(codepoint, map);
     if (index >= 0) {
       /* Found the mapping. */
       const auto codepoints{data.first(index * n_codepoints)};
@@ -928,7 +927,7 @@ static mdstring merge_lines(Parsing_Context &ctx, OFF beg, OFF end,
   buf.reserve(end - beg);
   OFF off = beg;
   unsigned line_idx = 0;
-  while (1) {
+  while (true) {
     OFF line_end = std::min(end, lines[line_idx].end);
     buf += ctx.text.substr(off, line_end - off);
     if (off >= line_end)
@@ -1032,7 +1031,7 @@ static int md_is_html_tag(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                           OFF max_end, OFF *p_end) {
   int attr_state;
   OFF off = beg;
-  OFF line_end = (lines.size() > 0) ? lines[0].end : ctx.text.size();
+  OFF line_end = (!lines.empty()) ? lines[0].end : ctx.text.size();
   size_t i = 0;
 
   MD_ASSERT(CH(beg) == _T('<'));
@@ -1068,7 +1067,7 @@ static int md_is_html_tag(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
 
   /* (Optional) attributes (if not closer), (optional) '/' (if not closer)
    * and final '>'. */
-  while (1) {
+  while (true) {
     while (off < line_end && !ISNEWLINE(off)) {
       if (attr_state > 40) {
         if (attr_state == 41 && (ISBLANK(off) || ISANYOF(off, _T("\"'=<>`")))) {
@@ -1122,7 +1121,7 @@ static int md_is_html_tag(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
 
     /* We have to be on a single line. See definition of start condition
      * of HTML block, type 7. */
-    if (lines.size() == 0)
+    if (lines.empty())
       return false;
 
     i++;
@@ -1332,7 +1331,7 @@ static bool md_is_named_entity_contents(mdstringview text, OFF beg, OFF max_end,
   }
 }
 
-static bool md_is_entity(mdstringview text, OFF beg, OFF max_end, OFF *p_end) {
+static bool md_is_entity(Parsing_Context& ctx, mdstringview text, OFF beg, OFF max_end, OFF *p_end) {
   int is_contents;
   OFF off = beg;
 
@@ -1426,7 +1425,7 @@ int Attribute_Build::build(Parsing_Context &ctx, mdstring t, unsigned flags,
       if (t[raw_off] == _T('&')) {
         OFF ent_end;
 
-        if (md_is_entity(t, raw_off, t.size(), &ent_end)) {
+        if (md_is_entity(ctx, t, raw_off, t.size(), &ent_end)) {
           MD_CHECK(Attribute_Build::append_substr(ctx, TextType::entity, off));
           off += ent_end - raw_off;
           raw_off = ent_end;
@@ -1434,7 +1433,7 @@ int Attribute_Build::build(Parsing_Context &ctx, mdstring t, unsigned flags,
         }
       }
 
-      if (substr_offsets.size() == 0 || substr_types.back() != TextType::normal)
+      if (substr_offsets.empty() || substr_types.back() != TextType::normal)
         MD_CHECK(Attribute_Build::append_substr(ctx, TextType::normal, off));
 
       if (!(flags & MD_BUILD_ATTR_NO_ESCAPES) && t[raw_off] == _T('\\') &&
@@ -1575,7 +1574,7 @@ struct MD_REF_DEF_tag {
   bool title_needs_free;
 };
 
-/* Label equivalence is quite complicated with regards to whitespace and case
+/* Label equivalence is quite complicated in regard to whitespace and case
  * folding. This complicates computing a hash of it as well as direct comparison
  * of two labels. */
 
@@ -1749,7 +1748,7 @@ static int md_build_ref_def_hashtable(Parsing_Context &ctx) {
       /* The bucket already contains one ref. def. Lets see whether it
        * is the same label (ref. def. duplicate) or different one
        * (hash conflict). */
-      Ref_Def *old_def = (Ref_Def *)bucket;
+      auto *old_def = (Ref_Def *)bucket;
 
       if (md_link_label_cmp(def->label, old_def->label) == 0) {
         /* Duplicate label: Ignore this ref. def. */
@@ -1780,7 +1779,7 @@ static int md_build_ref_def_hashtable(Parsing_Context &ctx) {
     list = (Ref_Def_List *)bucket;
     if (list->n_ref_defs >= list->alloc_ref_defs) {
       int alloc_ref_defs = list->alloc_ref_defs + list->alloc_ref_defs / 2;
-      Ref_Def_List *list_tmp = (Ref_Def_List *)realloc(
+      auto *list_tmp = (Ref_Def_List *)realloc(
           list, sizeof(Ref_Def_List) + alloc_ref_defs * sizeof(Ref_Def *));
       if (list_tmp == nullptr) {
         MD_LOG("realloc() failed.");
@@ -1866,7 +1865,7 @@ static const Ref_Def *md_lookup_ref_def(Parsing_Context &ctx,
     else
       return nullptr;
   } else {
-    Ref_Def_List *list = (Ref_Def_List *)bucket;
+    auto *list = (Ref_Def_List *)bucket;
     Ref_Def key_buf;
     const Ref_Def *key = &key_buf;
     const Ref_Def **ret;
@@ -2876,7 +2875,7 @@ static int md_is_autolink_uri(Parsing_Context &ctx, OFF beg, OFF max_end,
   if (off >= max_end || !ISASCII(off))
     return false;
   off++;
-  while (1) {
+  while (true) {
     if (off >= max_end)
       return false;
     if (off - beg > 32)
@@ -3691,7 +3690,7 @@ static void md_analyze_entity(Parsing_Context &ctx, int mark_index) {
   if (closer.ch != ';')
     return;
 
-  if (md_is_entity(ctx.text, opener.beg, closer.end, &off)) {
+  if (md_is_entity(ctx, ctx.text, opener.beg, closer.end, &off)) {
     MD_ASSERT(off == closer.end);
 
     md_resolve_range(ctx, nullptr, mark_index, mark_index + 1);
@@ -4158,7 +4157,7 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
 
   text_type = TextType::normal;
 
-  while (1) {
+  while (true) {
     /* Process the text up to the next mark or end-of-line. */
     OFF tmp = (line.end < mark->beg ? line.end : mark->beg);
     if (tmp > off) {
@@ -4710,7 +4709,7 @@ static int md_setup_fenced_code_detail(Parsing_Context &ctx, const Block *block,
                                        code_Detail *det,
                                        Attribute_Build *info_build,
                                        Attribute_Build *lang_build) {
-  const MD_VERBATIMLINE *fence_line = (const MD_VERBATIMLINE *)(block + 1);
+  const auto *fence_line = (const MD_VERBATIMLINE *)(block + 1);
   OFF beg = fence_line->beg;
   OFF end = fence_line->end;
   OFF lang_end;
@@ -4850,7 +4849,7 @@ static int md_process_all_blocks(Parsing_Context &ctx) {
   ctx.n_containers = 0;
 
   while (byte_off < ctx.n_block_bytes) {
-    Block *block = (Block *)((char *)ctx.block_bytes + byte_off);
+    auto *block = (Block *)((char *)ctx.block_bytes + byte_off);
     union {
       ul_Detail ul;
       ol_Detail ol;
@@ -5248,7 +5247,7 @@ static bool md_is_table_underline(Parsing_Context &ctx, OFF beg, OFF *p_end,
       off++;
   }
 
-  while (1) {
+  while (true) {
     OFF cell_beg;
     int delimited = false;
 
@@ -5912,7 +5911,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
         if (n_parents > 0 && ctx.cont[n_parents - 1].ch != _T('>') &&
             n_brothers + n_children == 0 && ctx.current_block == nullptr &&
             ctx.n_block_bytes > (int)sizeof(Block)) {
-          Block *top_block = reinterpret_cast<Block *>(
+          auto *top_block = reinterpret_cast<Block *>(
               (char *)ctx.block_bytes + ctx.n_block_bytes - sizeof(Block));
           if (top_block->type == BlockType::li)
             ctx.last_list_item_starts_with_two_blank_lines = true;
@@ -5931,7 +5930,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
         if (n_parents > 0 && ctx.cont[n_parents - 1].ch != _T('>') &&
             n_brothers + n_children == 0 && ctx.current_block == nullptr &&
             ctx.n_block_bytes > (int)sizeof(Block)) {
-          Block *top_block = reinterpret_cast<Block *>(
+          auto *top_block = reinterpret_cast<Block *>(
               (char *)ctx.block_bytes + ctx.n_block_bytes - sizeof(Block));
           if (top_block->type == BlockType::li)
             n_parents--;
@@ -6223,7 +6222,7 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
       n_parents + n_brothers > 0) {
     Container &c{ctx.cont[n_parents + n_brothers - 1]};
     if (c.ch != _T('>')) {
-      Block *block = reinterpret_cast<Block *>(((char *)ctx.block_bytes) +
+      auto *block = reinterpret_cast<Block *>(((char *)ctx.block_bytes) +
                                                c.block_byte_off);
       block->flags |= MD_BLOCK_LOOSE_LIST;
     }
@@ -6406,7 +6405,7 @@ int md_parse(mdstringview text, const MD_PARSER &parser, void *userdata) {
   ctx.code_indent_offset =
       (ctx.parser.flags.contains(No_Indented_Codeblock)) ? -1 : 4;
   md_build_mark_char_map(ctx);
-  ctx.doc_ends_with_newline = (text.size() > 0 && ISNEWLINE_(text.back()));
+  ctx.doc_ends_with_newline = (!text.empty() && ISNEWLINE_(text.back()));
 
   /* Reset all unresolved opener mark chains. */
   for (auto &mark : ctx.mark_chains)
