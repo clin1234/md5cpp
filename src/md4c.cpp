@@ -415,11 +415,10 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
 /* If the offset falls into a gap between line, we return the following line. */
 static const std::optional<Line>
 md_lookup_line(OFF off, const std::span<Line> lines) {
-    int lo, hi;
-    int pivot;
+    unsigned pivot;
 
-    lo = 0;
-    hi = lines.size() - 1;
+    long lo = 0;
+    long hi = lines.size() - 1;
     while (lo <= hi) {
         pivot = (lo + hi) / 2;
         const Line &line = lines[pivot];
@@ -2785,7 +2784,7 @@ static int md_is_code_span(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                            OFF *p_opener_beg, OFF *p_opener_end,
                            OFF *p_closer_beg, OFF *p_closer_end,
                            OFF last_potential_closers[CODESPAN_MARK_MAXLEN],
-                           bool p_reached_paragraph_end) {
+                           bool& p_reached_paragraph_end) {
     OFF opener_beg = beg;
     OFF opener_end;
     OFF closer_beg;
@@ -3158,12 +3157,8 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
                     off = closer_end;
 
                     /* Advance the current line accordingly. */
-                    auto &&tmp_iter{lines.begin()};
-                    while (*tmp_iter != line)
-                        tmp_iter++;
-                    while (off > line_end) {
-                        i++;
-                        line = *tmp_iter++;
+                    if (off > line_end) {
+                        line = *md_lookup_line(off, lines.subspan(i));
                         line_end = line.end;
                     }
                     continue;
@@ -3212,12 +3207,8 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
                         off = html_end;
 
                         /* Advance the current line accordingly. */
-                        auto &&tmp_iter{lines.begin()};
-                        while (*tmp_iter != line)
-                            tmp_iter++;
-                        while (off > line_end) {
-                            i++;
-                            line = *tmp_iter++;
+                        if (off > line_end) {
+                            line = *md_lookup_line(off, lines.subspan(i));
                             line_end = line.end;
                         }
                         continue;
