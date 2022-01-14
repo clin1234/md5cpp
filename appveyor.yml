@@ -23,7 +23,7 @@ configuration:
 
 platform:
   - x64    # 64-bit build
-  - win32  # 32-bit build
+  - Win32  # 32-bit build
 
 artifacts:
   - path: $(configuration)/md2html/md2html.exe

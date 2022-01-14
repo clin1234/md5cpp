@@ -230,7 +230,6 @@ std::string out;
 using enum Extensions; using enum RenderFlag;
 static const std::array cmdline_options{
         Option_Group{"General", {
-
                 Opt{'o', "output", "Output file (default is stdout)", {}},
                 Opt{'f', "full-html", "Generate full HTML, including header", {}},
                 Opt{'s', "stat", "Measure time of input parsing", {}},
@@ -368,7 +367,6 @@ HTML generator options:
 
 static void apply_opts(const cxxopts::ParseResult &re) {
     auto f = re.arguments();
-    std::ranges::remove_if(f, [](cxxopts::KeyValue &k) { return k.key() == "h"; });
     for (const auto &opt_group: cmdline_options) {
         if (opt_group.name == "General") {
             for (const auto &opt: opt_group.options) {
@@ -403,6 +401,7 @@ static void apply_opts(const cxxopts::ParseResult &re) {
 using namespace std::filesystem;
 static path input_path, output_path;
 
+/*
 static int cmdline_callback(int opt, char const *value,
                             [[maybe_unused]] void *data) {
     switch (opt) {
@@ -521,6 +520,7 @@ static int cmdline_callback(int opt, char const *value,
 
     return 0;
 }
+ */
 
 int main(int argc, char **argv) {
     int ret = 0;

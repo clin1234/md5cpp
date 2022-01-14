@@ -27,7 +27,6 @@
 #define MD4C_ENTITY_H
 
 #ifdef __cplusplus
-#include <array>
 #include <optional>
 #include <string_view>
 #endif
