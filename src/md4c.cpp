@@ -84,7 +84,8 @@ md4c, reproduced below:
 
 #define MD_UNREACHABLE() MD_ASSERT(1 == 0)
 #else
-                                                                                                                        #ifdef __GNUG__
+
+#ifdef __GNUG__
 #define MD_ASSERT(cond)                                                        \
   do {                                                                         \
     if (!(cond))                                                               \
@@ -308,7 +309,6 @@ struct MD_VERBATIMLINE_tag {
 #define ISPUNCT(off) ISPUNCT_(CH(off))
 #define ISUPPER(off) ISUPPER_(CH(off))
 #define ISALPHA(off) ISALPHA_(CH(off))
-#define ISDIGIT(off) ISDIGIT_(CH(off))
 
 #if defined MD4C_USE_UTF16
 #define md_strchr wcschr
@@ -1601,8 +1601,6 @@ struct MD_REF_DEF_tag {
     unsigned hash;
     OFF dest_beg;
     OFF dest_end;
-    bool label_needs_free;
-    bool title_needs_free;
 };
 
 /* Label equivalence is quite complicated in regard to whitespace and case
@@ -2250,7 +2248,6 @@ static int md_is_link_reference_definition(Parsing_Context &ctx,
     if (label_is_multiline) {
         def->label = merge_lines(ctx, label_contents_beg, label_contents_end,
                                  lines.subspan(label_contents_line_index), _T(' '));
-        def->label_needs_free = true;
     } else {
         def->label = mdstring(STR(label_contents_beg),
                               label_contents_end - label_contents_beg);
@@ -2260,7 +2257,6 @@ static int md_is_link_reference_definition(Parsing_Context &ctx,
         def->title =
                 merge_lines(ctx, title_contents_beg, title_contents_end,
                             lines.subspan(title_contents_line_index), _T('\n'));
-        def->title_needs_free = true;
     } else
         def->title = mdstring(STR(title_contents_beg),
                               title_contents_beg - title_contents_beg);
@@ -2289,12 +2285,12 @@ static int md_is_link_reference(Parsing_Context &ctx, std::span<Line> lines,
     end--;
 
     /* Find lines corresponding to the beg and end positions. */
+    const auto &beg_line_iter = std::ranges::find_if(lines, [beg](const Line &p) { return beg == p.beg; });
     const auto &beg_line = md_lookup_line(beg, lines);
     bool is_multiline = (end > beg_line->end);
 
     if (is_multiline) {
-        label = merge_lines(ctx, beg, end, std::span(beg_line_iter, lines.end()),
-                            _T(' '));
+        label = merge_lines(ctx, beg, end, std::span(beg_line_iter, lines.end()), _T(' '));
     } else {
         label = ctx.text.substr(beg, end - beg);
     }
@@ -2789,7 +2785,7 @@ static int md_is_code_span(Parsing_Context &ctx, std::span<Line> lines, OFF beg,
                            OFF *p_opener_beg, OFF *p_opener_end,
                            OFF *p_closer_beg, OFF *p_closer_end,
                            OFF last_potential_closers[CODESPAN_MARK_MAXLEN],
-                           bool& p_reached_paragraph_end) {
+                           bool &p_reached_paragraph_end) {
     OFF opener_beg = beg;
     OFF opener_end;
     OFF closer_beg;
@@ -3021,7 +3017,7 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
     Mark *mark;
     OFF codespan_last_potential_closers[CODESPAN_MARK_MAXLEN] = {0};
     bool codespan_scanned_till_paragraph_end = false;
-    const Line& last_line {lines.back()};
+    const Line &last_line{lines.back()};
 
     for (size_t i = 0; i < lines.size(); i++) {
         auto &line{lines[i]};
@@ -4417,8 +4413,7 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
                 MD_ASSERT(ISANYOF2_(mark->ch, '`', '$') &&
                           (mark->flags & MD_MARK_CLOSER));
 
-                /* Inside a code span, trailing line whitespace has to be
-         * outputted. */
+                /* Inside a code span, trailing line whitespace has to be outputted. */
                 tmp = off;
                 while (off < ctx.text.size() && ISBLANK(off))
                     off++;
@@ -4429,8 +4424,7 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
                 if (prev_mark->end < off && off < mark->beg)
                     MD_TEXT(text_type, mdstringview(_T(" ")));
             } else if (text_type == TextType::raw_html) {
-                /* Inside raw HTML, we output the new line verbatim, including
-         * any trailing spaces. */
+                /* Inside raw HTML, we output the new line verbatim, including any trailing spaces. */
                 OFF tmp = off;
 
                 while (tmp < end && ISBLANK(tmp))
@@ -4473,12 +4467,12 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
 
 static void md_analyze_table_alignment(Parsing_Context &ctx, OFF beg, OFF end,
                                        Align *align, int n_align) {
-    static const Align align_map[] = {Align::default_align, Align::left,
+    static constexpr Align align_map[] = {Align::default_align, Align::left,
                                       Align::right, Align::center};
     OFF off = beg;
 
     while (n_align > 0) {
-        int index = 0; /* index into align_map[] */
+        unsigned short index = 0; /* index into align_map[] */
 
         while (CH(off) != _T('-'))
             off++;
@@ -5607,7 +5601,7 @@ static int md_push_container(Parsing_Context &ctx, const Container *container) {
     try {
         ctx.cont.emplace_back(*container);
         return 0;
-    } catch (const std::exception &e) {
+    } catch (const std::bad_alloc &e) {
         MD_LOG(mdstring(vector_emplace_back_str) +mdstring(e.what()));
         return -1;
     }
@@ -6039,14 +6033,12 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
                 n_parents == ctx.cont.size() &&
                 (off >= ctx.text.size() || ISNEWLINE(off)) &&
                 container.ch != _T('>')) {
-                /* Noop. List mark followed by a blank line cannot interrupt a
-         * paragraph. */
+                /* Noop. List mark followed by a blank line cannot interrupt a paragraph. */
             } else if (pivot_line->type == LineType::text &&
                        n_parents == ctx.cont.size() &&
                        ISANYOF2_(container.ch, _T('.'), _T(')')) &&
                        container.start != 1) {
-                /* Noop. Ordered list cannot interrupt a paragraph unless the start
-         * index is 1. */
+                /* Noop. Ordered list cannot interrupt a paragraph unless the start index is 1. */
             } else {
                 total_indent += container.contents_indent - container.mark_indent;
                 line->indent = md_line_indentation(ctx, total_indent, off, &off);

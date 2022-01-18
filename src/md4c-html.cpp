@@ -601,7 +601,8 @@ static void debug_log_callback(mdstringview msg, void *userdata) {
         std::cerr << "MD5CPP: " << msg;
 }
 
-#if __cpp_lib_string_contains < 202011
+/*
+#ifndef __cpp_lib_string_contains
 using std::basic_string_view;
 
 template<class CharT,
@@ -613,12 +614,14 @@ constexpr bool std::basic_string_view<CharT, Traits>::contains(CharT c) const no
 #else
 
 #endif
+*/
 
 extern "C" int md_html(const MD_CHAR *input, MD_SIZE input_size,
                        void (*process_output)(const MD_CHAR *, MD_SIZE, void *),
                        void *userdata, unsigned parser_flags,
                        unsigned renderer_flags) {
     mdstringview view(input, input_size);
+
     return to_html(view,
                    static_cast<void (*)(mdstringview, void *)>(
                            [](mdstringview, void *data) -> void {}),
@@ -626,7 +629,7 @@ extern "C" int md_html(const MD_CHAR *input, MD_SIZE input_size,
 }
 
 int to_html(mdstringview input, void(*process_output)(mdstringview, void *),
-            void *userdata, unsigned parser_flags, unsigned renderer_flags) {
+            void *userdata, std::unordered_set<Extensions> parser_flags, unsigned renderer_flags) {
     HTML &&render{process_output, userdata, renderer_flags, 0, {0}};
 
     MD_PARSER &&parser{0,

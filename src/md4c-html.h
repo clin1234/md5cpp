@@ -74,6 +74,6 @@ int md_html(const MD_CHAR* input, MD_SIZE input_size,
 
 int to_html(mdstringview input,
             void (*process_output)(mdstringview, void*),
-            void* userdata, unsigned parser_flags, unsigned renderer_flags);
+            void* userdata, std::unordered_set<Extensions> parser_flags, unsigned renderer_flags);
 
 #endif  /* MD4C_HTML_H */

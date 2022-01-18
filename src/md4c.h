@@ -354,7 +354,6 @@ using Wikilink_Detail = _MD_SPAN_WIKILINK;
 #define MD_FLAG_PERMISSIVEWWWAUTOLINKS                                         \
   0x0400 /* Enable WWW autolinks (even without any scheme prefix, if they      \
             begin with 'www.') */
-#define MD_FLAG_TASKLISTS 0x0800 /* Enable task list extension. */
 #define MD_FLAG_LATEXMATHSPANS                                                 \
   0x1000 /* Enable $ and $$ containing LaTeX equations. */
 #define MD_FLAG_WIKILINKS 0x2000 /* Enable wiki links extension. */
@@ -370,6 +369,7 @@ Text Markup Language">HTML</abbr> */
 as having green and red backgrounds, respectively.  */
 #define MD_FLAG_COLOR 0x40000 /* Render RGB and HSL values in HTML output */
 #define MD_FLAG_TOC 0x100000  /* Generate table of contents from headings */
+#define MD_FLAG_TASKLISTS 0x200000 /* Enable task list extension. */
 
 #define MD_FLAG_PERMISSIVEAUTOLINKS                                            \
   (MD_FLAG_PERMISSIVEEMAILAUTOLINKS | MD_FLAG_PERMISSIVEURLAUTOLINKS |         \
