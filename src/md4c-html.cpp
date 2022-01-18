@@ -1,3 +1,8 @@
+/* md5cpp: fast Markdown parser in C++20.
+Copyright 2021 Charlie Lin
+This software is derived from md4c, and is licensed under the same terms as
+md4c, reproduced below:
+*/
 /*
  * MD4C: Markdown parser for C
  * (http://github.com/mity/md4c)
