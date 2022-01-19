@@ -2287,6 +2287,7 @@ static int md_is_link_reference(Parsing_Context &ctx, std::span<Line> lines,
     /* Find lines corresponding to the beg and end positions. */
     const auto &beg_line_iter = std::ranges::find_if(lines, [beg](const Line &p) { return beg == p.beg; });
     const auto &beg_line = md_lookup_line(beg, lines);
+
     bool is_multiline = (end > beg_line->end);
 
     if (is_multiline) {

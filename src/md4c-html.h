@@ -41,15 +41,23 @@ md4c, reproduced below:
 #define MD_HTML_FLAG_SKIP_UTF8_BOM          0x0004
 #define MD_HTML_FLAG_XHTML                  0x0008
 
+#ifdef __cplusplus
 enum class RenderFlag : unsigned char{
     Debug,
     Verbatim_Entities = 1 << 1,
     Skip_UTF8_BOM = 1 << 2,
     XHTML = 1 << 3,
 };
+using enum RenderFlag;
+std::unordered_map<unsigned short, RenderFlag> int_to_scoped_enum_render{
+    {MD_HTML_FLAG_DEBUG, Debug},
+    {MD_HTML_FLAG_VERBATIM_ENTITIES, Verbatim_Entities},
+    {MD_HTML_FLAG_SKIP_UTF8_BOM, Skip_UTF8_BOM},
+    {MD_HTML_FLAG_XHTML, XHTML}
+};
 
 using mdstringview = std::basic_string_view<MD_CHAR>;
-
+#endif
 /* Render Markdown into HTML.
  *
  * Note only contents of <body> tag is generated. Caller must generate
@@ -66,14 +74,17 @@ using mdstringview = std::basic_string_view<MD_CHAR>;
  * Returns -1 on error (if md_parse() fails.)
  * Returns 0 on success.
  */
+#ifdef  __cplusplus
 extern "C" {
+#endif
 int md_html(const MD_CHAR* input, MD_SIZE input_size,
             void (*process_output)(const MD_CHAR*, MD_SIZE, void*),
             void* userdata, unsigned parser_flags, unsigned renderer_flags);
 }
 
+#ifdef __cplusplus
 int to_html(mdstringview input,
             void (*process_output)(mdstringview, void*),
-            void* userdata, std::unordered_set<Extensions> parser_flags, unsigned renderer_flags);
-
+            void* userdata, unsigned parser_flags, unsigned renderer_flags);
+#endif
 #endif  /* MD4C_HTML_H */
