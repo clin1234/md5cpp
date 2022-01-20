@@ -33,7 +33,6 @@ md4c, reproduced below:
 #include <cctype>
 #include <memory>
 #include <span>
-#include <string.h>
 #include <string>
 #include <variant>
 #include <vector>
@@ -397,7 +396,7 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
 
 #define MD_TEXT(type, str)                                                     \
   do {                                                                         \
-    if (!str.empty()) {                                                      \
+    if (!(str).empty()) {                                                      \
       ret = ctx.parser.text((type), (str), ctx.userdata);                      \
       if (ret != 0) {                                                          \
         MD_LOG("Aborted from text() callback.");                               \
@@ -408,7 +407,7 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
 
 #define MD_TEXT_INSECURE(type, str)                                            \
   do {                                                                         \
-    if ((str).size() > 0) {                                                      \
+    if (!(str).empty()) {                                                      \
       ret = md_text_with_null_replacement(ctx, type, str);                     \
       if (ret != 0) {                                                          \
         MD_LOG("Aborted from text() callback.");                               \
@@ -418,7 +417,7 @@ static int md_text_with_null_replacement(Parsing_Context &ctx, MD_TEXTTYPE type,
   } while (0)
 
 /* If the offset falls into a gap between line, we return the following line. */
-static const std::optional<Line>
+static std::optional<Line>
 md_lookup_line(OFF off, const std::span<Line> lines) {
     unsigned pivot;
 
@@ -1361,7 +1360,7 @@ static bool md_is_named_entity_contents(mdstringview text, OFF beg, OFF max_end,
     }
 }
 
-static bool md_is_entity(Parsing_Context &ctx, mdstringview text, OFF beg, OFF max_end, OFF *p_end) {
+static bool md_is_entity(mdstringview text, OFF beg, OFF max_end, OFF *p_end) {
     int is_contents;
     OFF off = beg;
 
@@ -1456,7 +1455,7 @@ int Attribute_Build::build(Parsing_Context &ctx, mdstring t, unsigned flags,
             if (t[raw_off] == _T('&')) {
                 OFF ent_end;
 
-                if (md_is_entity(ctx, t, raw_off, t.size(), &ent_end)) {
+                if (md_is_entity(t, raw_off, t.size(), &ent_end)) {
                     MD_CHECK(Attribute_Build::append_substr(ctx, TextType::entity, off));
                     off += ent_end - raw_off;
                     raw_off = ent_end;
@@ -1942,7 +1941,7 @@ static bool md_is_link_label(Parsing_Context &ctx, std::span<Line> lines,
         return false;
     off++;
 
-    while (1) {
+    while (true) {
         OFF line_end = lines[line_index].end;
 
         while (off < line_end) {
@@ -2175,7 +2174,7 @@ static int md_is_link_reference_definition(Parsing_Context &ctx,
     OFF off;
     unsigned line_index = 0;
     unsigned tmp_line_index;
-    Ref_Def *def = nullptr;
+    //Ref_Def *def = nullptr;
     int ret = 0;
 
     /* Link label. */
@@ -2226,6 +2225,7 @@ static int md_is_link_reference_definition(Parsing_Context &ctx,
     if (off < lines[line_index].end)
         return false;
 
+    Ref_Def* def{};
     /* So, it _is_ a reference definition. Remember it. */
     if (ctx.n_ref_defs >= ctx.alloc_ref_defs) {
         Ref_Def *new_defs;
@@ -3018,8 +3018,9 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
     Mark *mark;
     OFF codespan_last_potential_closers[CODESPAN_MARK_MAXLEN] = {0};
     bool codespan_scanned_till_paragraph_end = false;
-    const Line &last_line{lines.back()};
+    //const Line &last_line{lines.back()};
 
+    using enum Extensions;
     for (size_t i = 0; i < lines.size(); i++) {
         auto &line{lines[i]};
         OFF off = line.beg;
@@ -3192,7 +3193,7 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
                 OFF autolink_end;
                 bool missing_mailto;
 
-                if (!(ctx.parser.flags.contains(No_Raw_HTML_Block))) {
+                if (!(ctx.parser.flags.contains(Extensions::No_Raw_HTML_Block))) {
                     OFF html_end;
 
                     /* Given the nature of the raw HTML, we have to recognize
@@ -3454,6 +3455,7 @@ static int md_resolve_links(Parsing_Context &ctx, std::span<Line> lines) {
     OFF last_img_beg = 0;
     OFF last_img_end = 0;
 
+    using enum Extensions;
     while (opener_index >= 0) {
         Mark *opener = &ctx.marks[opener_index];
         int closer_index = opener->next;
@@ -3720,7 +3722,7 @@ static void md_analyze_entity(Parsing_Context &ctx, int mark_index) {
     if (closer.ch != ';')
         return;
 
-    if (md_is_entity(ctx, ctx.text, opener.beg, closer.end, &off)) {
+    if (md_is_entity(ctx.text, opener.beg, closer.end, &off)) {
         MD_ASSERT(off == closer.end);
 
         md_resolve_range(ctx, nullptr, mark_index, mark_index + 1);
@@ -4124,12 +4126,12 @@ static int md_enter_leave_span_a(Parsing_Context &ctx, int enter,
                                  mdstringview title) {
     Attribute_Build href_build{};
     Attribute_Build title_build{};
-    a_Detail det;
+    a_Detail det{};
     int ret = 0;
 
     /* Note we here rely on fact that MD_SPAN_A_DETAIL and
    * MD_SPAN_IMG_DETAIL are binary-compatible. */
-    memset(&det, 0, sizeof(a_Detail));
+    //memset(&det, 0, sizeof(a_Detail));
     MD_CHECK(href_build.build(
             ctx, mdstring(dest),
             (prohibit_escapes_in_dest ? MD_BUILD_ATTR_NO_ESCAPES : 0), det.href));
@@ -4182,6 +4184,7 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
 
     text_type = TextType::normal;
 
+    using enum Extensions;
     while (true) {
         /* Process the text up to the next mark or end-of-line. */
         OFF tmp = (line.end < mark->beg ? line.end : mark->beg);
@@ -4406,8 +4409,6 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
                 break;
 
             if (text_type == TextType::code || text_type == TextType::latex) {
-                OFF tmp;
-
                 MD_ASSERT(prev_mark != nullptr);
                 MD_ASSERT(ISANYOF2_(prev_mark->ch, '`', '$') &&
                           (prev_mark->flags & MD_MARK_OPENER));
@@ -4415,7 +4416,7 @@ static int md_process_inlines(Parsing_Context &ctx, std::span<Line> lines) {
                           (mark->flags & MD_MARK_CLOSER));
 
                 /* Inside a code span, trailing line whitespace has to be outputted. */
-                tmp = off;
+                OFF tmp = off;
                 while (off < ctx.text.size() && ISBLANK(off))
                     off++;
                 if (off > tmp)
@@ -4496,7 +4497,7 @@ static int md_process_normal_block_contents(Parsing_Context &ctx,
 
 static int md_process_table_cell(Parsing_Context &ctx, MD_BLOCKTYPE cell_type,
                                  Align align, OFF beg, OFF end) {
-    Line line;
+    Line line{};
     td_Detail det;
     int ret = 0;
 
@@ -4772,7 +4773,7 @@ static int md_process_leaf_block(Parsing_Context &ctx, const Block *block) {
     Attribute_Build info_build;
     Attribute_Build lang_build;
     bool is_in_tight_list;
-    bool clean_fence_code_detail = false;
+    //bool clean_fence_code_detail = false;
     int ret = 0;
 
     // memset(&det, 0, sizeof(det));
@@ -4791,7 +4792,7 @@ static int md_process_leaf_block(Parsing_Context &ctx, const Block *block) {
             /* For fenced code block, we may need to set the info string. */
             if (block->data != 0) {
                 // memset(&det.code, 0, sizeof(code_Detail));
-                clean_fence_code_detail = true;
+                //clean_fence_code_detail = true;
                 MD_CHECK(md_setup_fenced_code_detail(
                         ctx, block, &std::get<code_Detail>(det), &info_build, &lang_build));
             }
@@ -5225,6 +5226,7 @@ static int md_is_atxheader_line(Parsing_Context &ctx, OFF beg, OFF *p_beg,
         return false;
     *p_level = n;
 
+    using enum Extensions;
     if (!(ctx.parser.flags.contains(No_Space_Needed_for_ATXHeaders)) &&
         off < ctx.text.size() && CH(off) != _T(' ') && CH(off) != _T('\t') &&
         !ISNEWLINE(off))
@@ -5805,6 +5807,8 @@ static int md_analyze_line(Parsing_Context &ctx, OFF beg, OFF *p_end,
     line->indent = md_line_indentation(ctx, total_indent, off, &off);
     total_indent += line->indent;
     line->beg = off;
+
+    using enum Extensions;
 
     /* Given the indentation and block quote marks '>', determine how many of
    * the current containers are our parents. */
@@ -6418,7 +6422,7 @@ int md_parse(mdstringview text, const MD_PARSER &parser, void *userdata) {
     ctx.parser = parser;
     ctx.userdata = userdata;
     ctx.code_indent_offset =
-            (ctx.parser.flags.contains(No_Indented_Codeblock)) ? -1 : 4;
+            (ctx.parser.flags.contains(Extensions::No_Indented_Codeblock)) ? -1 : 4;
     md_build_mark_char_map(ctx);
     ctx.doc_ends_with_newline = (!text.empty() && ISNEWLINE_(text.back()));
 
