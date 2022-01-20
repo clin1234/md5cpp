@@ -44,6 +44,7 @@ using HTML = struct MD_HTML_tag;
 
 struct MD_HTML_tag {
     void (*process_output)(mdstringview, void *);
+
     void *userdata;
     std::unordered_set<RenderFlag> flags;
     unsigned short image_nesting_level;
@@ -642,14 +643,16 @@ std::unordered_map<unsigned short, RenderFlag> macro_to_scoped_enum_render{
 /* Template madness ahead:
  * Converts an unsigned integer containing a bitwise-OR of flags into a set of
  * scoped enums */
-template<typename U, class T>
-auto int_flags_to_scoped_enum(U flags, const std::unordered_map<U, T> &map) {
+template<typename U, typename M>
+auto int_flags_to_scoped_enum(U flags, M const &map) {
+    using Enum_Type = typename M::mapped_type;
     static_assert(std::is_integral_v<U>);
     //unsigned bit_length = std::bit_floor(flags);
-    std::unordered_set<T> res{};
-    std::transform(map.cbegin(), map.cend(), std::inserter(res, res.begin()), [&flags](const std::pair<U, T> &something) {
-        if (something.first & flags) { return something.second; }
-    });
+    std::unordered_set<Enum_Type> res{};
+    std::transform(map.cbegin(), map.cend(), std::inserter(res, res.begin()),
+                   [&flags](const std::pair<U, Enum_Type> &something) {
+                       if (something.first & flags) { return something.second; }
+                   });
     return res;
 }
 
@@ -658,11 +661,10 @@ extern "C" int md_html(const MD_CHAR *input, MD_SIZE input_size,
                        void *userdata, unsigned parser_flags,
                        unsigned renderer_flags) {
     mdstringview view(input, input_size);
-    // TODO: figure out how to deduce parameters for int_flags_to_scoped_enum()
-    std::unordered_set<Extensions> parser_flag_set = int_flags_to_scoped_enum<unsigned, Extensions>(parser_flags,
-                                                                                          macro_to_scoped_enum_ext);
-    std::unordered_set<RenderFlag> render_flag_set = int_flags_to_scoped_enum<unsigned short, RenderFlag>(renderer_flags,
-                                                                                          macro_to_scoped_enum_render);
+    std::unordered_set<Extensions> parser_flag_set = int_flags_to_scoped_enum(parser_flags,
+                                                                              macro_to_scoped_enum_ext);
+    std::unordered_set<RenderFlag> render_flag_set = int_flags_to_scoped_enum(renderer_flags,
+                                                                              macro_to_scoped_enum_render);
     return to_html(view,
                    static_cast<void (*)(mdstringview, void *)>(
                            [](mdstringview, void *data) -> void {}),
