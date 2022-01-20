@@ -28,8 +28,6 @@ md4c, reproduced below:
  * IN THE SOFTWARE.
  */
 
-#include <stdio.h>
-
 #include "include/cxxopts.hpp"
 #include "md4c-html.h"
 #include "md4c.h"
@@ -61,13 +59,12 @@ using mdstring = std::basic_string<MD_CHAR>;
 using mdstringview = std::basic_string_view<MD_CHAR>;
 
 /* Global options. */
-static unsigned parser_flags = 0;
+static std::unordered_set<Extensions> parser_flags{};
+static std::unordered_set<RenderFlag> rendering_flags{Debug,
 #ifndef MD4C_USE_ASCII
-static unsigned renderer_flags =
-        MD_HTML_FLAG_DEBUG | MD_HTML_FLAG_SKIP_UTF8_BOM;
-#else
-static unsigned renderer_flags = MD_HTML_FLAG_DEBUG;
+                                                      Skip_UTF8_BOM
 #endif
+};
 static bool want_fullhtml;
 static bool want_xhtml;
 static bool want_stat;
@@ -165,11 +162,11 @@ static int process_file(std::istream &in, std::ostream &out) {
 
     /* Parse the document. This shall call our callbacks provided via the
      * md_renderer_t structure. */
-    ret = to_html(in_buf, process_output, &out_buf, parser_flags, renderer_flags);
+    ret = to_html(in_buf, process_output, &out_buf, parser_flags, rendering_flags);
 
     auto t1 = std::chrono::steady_clock::now();
     if (ret != 0) {
-        fprintf(stderr, "Parsing failed.\n");
+        std::cerr << "Parsing failed.\n";
         return ret;
     }
 
@@ -371,10 +368,9 @@ HTML generator options:
 }*/
 
 static void apply_opts(const cxxopts::ParseResult &re) {
-    auto f = re.arguments();
-    for (const auto &opt_group: cmdline_options) {
-        if (opt_group.name == "General") {
-            for (const auto &opt: opt_group.options) {
+       for (const auto &opt_group: cmdline_options) {
+        if (opt_group.name == "General")
+            for (const auto &opt: opt_group.options)
                 switch (opt.short_opt) {
                     case 'v':
                         std::cout << MD_VERSION << '\n';
@@ -386,20 +382,15 @@ static void apply_opts(const cxxopts::ParseResult &re) {
                         want_stat = true;
                         break;
                 }
-            }
-        } else if (opt_group.name == "Extensions" or opt_group.name == "Markdown suppression") {
+        else if (opt_group.name == "Extensions" or opt_group.name == "Markdown suppression")
             for (const auto &opt: opt_group.options) {
-                if (re.count(opt.long_opt)) {
-                    parser_flags |= std::get<Extensions>(opt.flag);
-                }
+                if (re.count(opt.long_opt))
+                    parser_flags.insert(std::get<Extensions>(opt.flag));
             }
-        } else if (opt_group.name == "Rendering") {
-            for (const auto &opt: opt_group.options) {
-                if (re.count(opt.long_opt)) {
-                    renderer_flags |= std::get<RenderFlag>(opt.flag);
-                }
-            }
-        }
+        else if (opt_group.name == "Rendering")
+            for (const auto &opt: opt_group.options)
+                if (re.count(opt.long_opt))
+                    rendering_flags.insert(std::get<RenderFlag>(opt.flag));
     }
 }
 

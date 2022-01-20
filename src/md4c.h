@@ -437,33 +437,6 @@ enum class Extensions : unsigned long {
   Table_of_Contents = 1 << 17
 };
 
-using enum Extensions;
-const std::unordered_map<unsigned long, Extensions> macro_to_scoped_enum_ext{
-    {MD_FLAG_COLLAPSEWHITESPACE, Collapse_Whitespace},
-    {MD_FLAG_ABBREVIATIONS, Abbreviation},
-    {MD_FLAG_COLOR, Color},
-    {MD_FLAG_INLINE_DIFF, Inline_Diff},
-    {MD_FLAG_LATEXMATHSPANS, LaTeX_Math},
-    {MD_FLAG_NOHTMLBLOCKS, No_Raw_HTML_Block},
-    {MD_FLAG_NOHTMLSPANS, No_Raw_HTML_Inline},
-    {MD_FLAG_NOINDENTEDCODEBLOCKS, No_Indented_Codeblock},
-    {MD_FLAG_PERMISSIVEATXHEADERS, No_Space_Needed_for_ATXHeaders},
-    {MD_FLAG_PERMISSIVEAUTOLINKS, Permissive_Autolink},
-    {MD_FLAG_PERMISSIVEEMAILAUTOLINKS, Permissive_Email_Autolink},
-    {MD_FLAG_PERMISSIVEWWWAUTOLINKS, Permissive_WWW_Autolink},
-    {MD_FLAG_STRIKETHROUGH, Strikethrough},
-    {MD_FLAG_TABLES, Tables},
-    {MD_FLAG_TOC, Table_of_Contents},
-    {MD_FLAG_TASKLISTS, Tasklist},
-    {MD_FLAG_UNDERLINE, Underline},
-    {MD_FLAG_WIKILINKS, Wikilinks},
-};
-
-inline Extensions operator|(Extensions lhs, Extensions rhs) {
-  using T = std::underlying_type_t<Extensions>;
-  return static_cast<Extensions>(static_cast<T>(lhs) | static_cast<T>(rhs));
-}
-
 /* Parser structure.
  */
 struct _MD_PARSER {
