@@ -31,6 +31,7 @@ md4c, reproduced below:
 #include "md4c-html.h"
 #include "entity.h"
 
+#include <algorithm>
 #include <cctype>
 #include <iostream>
 #include <limits>

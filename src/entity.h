@@ -44,7 +44,7 @@ struct entity {
 #ifdef __cplusplus
 /* Returns `std::optional<struct entity>`, where `operator bool()` can be used
 to determine if `name` matches an entity, and .value() if it exists. */
-constexpr std::optional<entity> lookup(std::string_view);
+const std::optional<entity> lookup(std::string_view);
 
 extern "C" {
 #endif // __cplusplus

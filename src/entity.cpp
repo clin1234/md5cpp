@@ -2270,7 +2270,7 @@ static constexpr std::array<entity, 2231> entity_table{{
     {"&zwnj;", {8204}},
 }};
 
-constexpr std::optional<entity> lookup(std::string_view name) {
+const std::optional<entity> lookup(std::string_view name) {
   const auto &pred = [&name](const struct entity &e) { return name == e.name; };
   std::optional<entity> return_val{};
   const auto tmp{std::ranges::find_if(entity_table, pred)};

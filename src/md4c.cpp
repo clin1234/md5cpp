@@ -38,6 +38,7 @@ md4c, reproduced below:
 #include <vector>
 #include <algorithm>
 #include <optional>
+#include <cstring>
 
 
 /*****************************
@@ -310,9 +311,9 @@ struct MD_VERBATIMLINE_tag {
 #define ISALPHA(off) ISALPHA_(CH(off))
 
 #if defined MD4C_USE_UTF16
-#define md_strchr wcschr
+#define md_strchr std::wcschr
 #else
-#define md_strchr strchr
+#define md_strchr std::strchr
 #endif
 
 static bool is_case_insensitive_equal(mdstringview s1, mdstringview s2) {
@@ -2997,7 +2998,7 @@ static int md_is_autolink_email(Parsing_Context &ctx, OFF beg, OFF max_end,
     return true;
 }
 
-static int md_is_autolink(Parsing_Context &ctx, OFF beg, OFF max_end,
+static bool md_is_autolink(Parsing_Context &ctx, OFF beg, OFF max_end,
                           OFF *p_end, bool *p_missing_mailto) {
     if (md_is_autolink_uri(ctx, beg, max_end, p_end)) {
         *p_missing_mailto = false;
@@ -3018,7 +3019,7 @@ static int md_collect_marks(Parsing_Context &ctx, std::span<Line> lines,
     Mark *mark;
     OFF codespan_last_potential_closers[CODESPAN_MARK_MAXLEN] = {0};
     bool codespan_scanned_till_paragraph_end = false;
-    //const Line &last_line{lines.back()};
+    //const Line& last_line {lines.back()};
 
     using enum Extensions;
     for (size_t i = 0; i < lines.size(); i++) {
