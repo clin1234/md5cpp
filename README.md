@@ -11,7 +11,7 @@
 * Issue tracker: http://github.com/clin1234/md5cpp/issues (see also 
 http://github.com/mity/md4c/issues as suggestions)
 
-MD5CPP stands for "Markdown fur C++", and is derived from [MD4C](https://github.com/mity/md4c).
+MD5CPP stands for "Markdown für C++", and is derived from [MD4C](https://github.com/mity/md4c).
 
 ## What is Markdown
 
@@ -23,7 +23,7 @@ The following resources can explain more if you are unfamiliar with it:
 
 ## What is MD5CPP
 
-MD5CXX:
+MD5CPP:
 
 * **Compliance:** aims to be compliant to the latest version of
   [CommonMark specification](http://spec.commonmark.org/). Currently, this is
@@ -37,8 +37,9 @@ MD5CXX:
   maybe add a headers-only library for argument parsing)?
 
 * **Embedding:** is easy to reuse in other projects, its API is
-  very straightforward: There is actually just one function, `md_parse()`,
-  available for both C and C++ applications.
+  very straightforward: Two functions are available, `md_parse()`,
+  for compatibility with `md4c`, and `md5cpp::parse()`, which is friendlier
+* to C++ applications.
 
 * **Push model:** parses the complete document and calls few callback
   functions provided by the application to inform it about a start/end of
@@ -53,7 +54,7 @@ MD5CXX:
   disable all Unicode-specific code), or (on Windows) to expect UTF-16 (i.e.
   what is on Windows commonly called just "Unicode"). See more details below.
 
-* **Permissive license:** MD4C is available under the [MIT license](LICENSE.md).
+* **Permissive license:** MD4CPP is available under the [MIT license](LICENSE.md).
 
 ## Using MD5CPP
 
@@ -64,12 +65,12 @@ and link against MD4C library (`-lmd5cpp`); or alternatively add `md4c.{h,cpp}`
 directly to your code base as the parser is only implemented in the single C++
 source file.
 
-The main provided function is `md_parse()`. It takes a text in the Markdown
+The main provided function is `md5cpp::parse()`. It takes a text in the Markdown
 syntax and a pointer to a structure which provides pointers to several callback
-functions. Note that the C++ version of `md_parse()` requires the platform's
-standard library to support std::string_view.
+functions. Note that `md5cpp::parse()` requires the platform's
+C++ compiler to support std::string_view and scoped enums.
 
-As `md_parse()` processes the input, it calls the callbacks (when entering or
+As `md5cpp::parse()` processes the input, it calls the callbacks (when entering or
 leaving any Markdown block or span; and when outputting any textual content of
 the document), allowing application to convert it into another format or render
 it onto the screen.
@@ -78,10 +79,12 @@ it onto the screen.
 
 If you need to convert Markdown to HTML, include `md4c-html.h` and link against
 MD4C-HTML library (`-lmd5cpp-html`); or alternatively add the sources `md4c.{h,cpp}`,
-`md4c-html.{h,cpp}` and `entity.{h,cpp}` into your code base. Like `md_parse()`,
-the C++ version of `md_html()` requires the platform's standard library to support std::string_view.
+`md4c-html.{h,cpp}` and `entity.{h,cpp}` into your code base. Like `md5cpp::parse()`,
+`md5cpp::to_html()` requires the platform's standard library to support std::string_view
+and scoped enums.
 
-To convert a Markdown input, call `md_html()` function. It takes the Markdown
+To convert a Markdown input, call `md5cpp::to_html()`, (or `md_html()`, which wraps around the 
+C++ function). It takes the Markdown
 input and calls the provided callback function. The callback is fed with
 chunks of the HTML output. Typical callback implementation just appends the
 chunks into a buffer or writes them to a file.
@@ -181,11 +184,11 @@ preprocessor macros (as specified at the time MD4C is being built):
   Win32API generally works with.)
 
   Note that because this macro affects also the types in `md4c.h`, you have
-  to define the macro both when building MD4C as well as when including
+  to define the macro both when building MD4C and when including
   `md4c.h`.
 
   Also note this is only supported in the parser (`md4c.{h,cpp}`). The HTML
-  renderer does not support this and you will have to write your own custom
+  renderer does not support this, and you will have to write your own custom
   renderer to use this feature.
 
 * If preprocessor macro `MD4C_USE_ASCII` is defined, MD4C assumes nothing but
@@ -200,8 +203,8 @@ preprocessor macros (as specified at the time MD4C is being built):
 The API of the parser is quite well documented in the comments in the `md4c.h`.
 Similarly, the markdown-to-html API is described in its header `md4c-html.h`.
 
-There is also [project wiki](http://github.com/mity/md4c/wiki) which provides
-some more comprehensive documentation. However note it is incomplete and some
+[md4c's project wiki](http://github.com/mity/md4c/wiki) provides
+some more comprehensive documentation. However, note it is incomplete and some
 details may be somewhat outdated.
 
 ## FAQ (rest of README left verbatim)
@@ -216,7 +219,7 @@ process the input in any other way.
 Even when the parsing is available as a standalone feature, most parsers (if
 not all of them; at least within the scope of C/C++ language) are full DOM-like
 parsers: They construct abstract syntax tree (AST) representation of the whole
-Markdown document. That takes time and it leads to bigger memory footprint.
+Markdown document. That takes time, and it leads to bigger memory footprint.
 
 It's completely fine as long as you really need it. If you don't need the full
 AST, there is a very high chance that using MD4C will be substantially faster
@@ -231,7 +234,7 @@ source, the possibility of denial-of-service attacks becomes a real danger.
 
 A lot of our effort went into providing linear parsing times no matter what
 kind of crazy input MD4C parser is fed with. (If you encounter an input pattern
-which leads to a sub-linear parsing times, please do not hesitate and report it
+which leads to sublinear parsing times, please do not hesitate and report it
 as a bug.)
 
 **Q: Does MD4C perform any input validation?**
@@ -260,7 +263,6 @@ validate the whole document before passing it to the MD4C parser.
 ## License (until here)
 
 MD5CPP is covered with MIT license, see the file `LICENSE.md`.
-
 
 ## Links to Related Projects
 
